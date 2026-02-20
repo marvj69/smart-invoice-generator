@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Invoice Generator</title>
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Invoices">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./icons/icon-192.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./icons/icon-192.svg">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- html2pdf.js for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <!-- pdf.js for PDF text import -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="./styles/index.css">
+</head>
+<body class="text-gray-800 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 shadow-sm z-20">
+        <div class="max-w-full mx-auto px-3 sm:px-6 lg:px-8 min-h-[88px] py-3 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+            <div class="flex min-w-0 items-center gap-3 sm:gap-4">
+                <div class="w-12 h-12 sm:w-14 sm:h-14 gradient-bg rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
+                    <i class="fas fa-file-invoice text-2xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight leading-tight truncate">Invoice Generator</h1>
+                    <p class="hidden md:block text-sm text-gray-500 truncate">Create professional invoices in seconds</p>
+                </div>
+            </div>
+            
+            <div class="ml-auto flex items-center gap-2 sm:gap-3">
+                <div class="header-action-group">
+                    <label class="header-action-button cursor-pointer" title="Import invoice">
+                        <i class="fas fa-file-import"></i>
+                        <span class="sr-only">Import</span>
+                        <input type="file" id="invoiceImportInput" accept=".pdf,.json,.txt,.html,.htm,.csv" class="hidden" onchange="handleInvoiceUpload(this)">
+                    </label>
+                    <button type="button" onclick="openTemplateManager()" class="header-action-button" title="Saved templates" aria-label="Saved templates">
+                        <i class="fas fa-folder-open"></i>
+                        <span class="sr-only">Templates</span>
+                    </button>
+                    <button id="mobilePreviewButton" type="button" aria-label="Preview invoice" onclick="openMobilePreview()" class="lg:hidden header-action-button" title="Preview invoice">
+                        <i class="fas fa-eye"></i>
+                        <span class="sr-only">Preview</span>
+                    </button>
+                    <div id="chatTemplateMenuWrapper" class="relative">
+                        <button id="chatTemplateToggle" type="button" aria-label="Chat to template" aria-haspopup="true" aria-expanded="false" aria-controls="chatTemplatePanel" onclick="toggleChatTemplateBubble(event)" class="header-action-button header-action-ai" title="Chat to template">
+                            <span class="chat-template-ai-icon" aria-hidden="true"></span>
+                        </button>
+                        <div id="chatTemplatePanel" class="chat-template-panel hidden absolute right-0 mt-3 z-40">
+                            <div class="flex items-center justify-between gap-2">
+                                <h3 class="text-xs font-semibold uppercase tracking-wider text-blue-900">Chat to Template</h3>
+                                <span class="chat-template-badge">Gemini</span>
+                            </div>
+                            <p class="mt-2 text-xs text-blue-800">Describe the invoice you want and Gemini will infer as many fields as possible.</p>
+                            <textarea id="chatToTemplateInput" rows="5" placeholder="Example: Create a bid for snow removal for 885 County Rd CKL in Champion, MI. Customer is John Doe at 102 Main St, Marquette, MI 49855. Charge 4 visits at $175 each plus salt delivery 1 at $95. Use 6% tax and add a note that payment is due in 15 days."
+                                class="mt-3 w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-y bg-white"
+                                onkeydown="handleChatTemplateKeydown(event)"></textarea>
+                            <div class="mt-3 flex gap-2">
+                                <button id="chatToTemplateButton" type="button" onclick="generateTemplateFromChat()" class="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                                    <i class="fas fa-robot"></i>
+                                    <span id="chatToTemplateButtonText">Populate Invoice</span>
+                                </button>
+                                <button type="button" onclick="clearChatTemplateInput()" class="px-3 py-2 bg-white border border-blue-200 text-blue-900 text-sm font-medium rounded-md hover:bg-blue-100 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                            <p class="mt-2 text-[11px] text-blue-700">Tip: press Cmd/Ctrl + Enter to run.</p>
+                        </div>
+                    </div>
+                    <div id="settingsMenuWrapper" class="relative">
+                        <button id="settingsMenuButton" type="button" aria-label="Open settings" aria-haspopup="true" aria-expanded="false" onclick="toggleSettingsMenu(event)" class="header-action-button" title="Settings">
+                            <i class="fas fa-gear"></i>
+                            <span class="sr-only">Settings</span>
+                        </button>
+                        <div id="settingsMenu" class="hidden absolute right-0 mt-3 w-[340px] max-w-[calc(100vw-1rem)] bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-40">
+                        <div class="bg-blue-50 rounded-lg p-4 space-y-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <h3 class="text-sm font-semibold text-blue-900">Gemini Import + Chat</h3>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-1 rounded">Vision LLM</span>
+                            </div>
+                            <p class="text-xs text-blue-800">PDF imports and chat parsing are sent directly from your browser to Gemini using your API key.</p>
+                            <div class="space-y-1">
+                                <label for="geminiApiKey" class="block text-xs font-medium text-blue-900">Gemini API Key</label>
+                                <input type="password" id="geminiApiKey" placeholder="AIza..." autocomplete="off"
+                                    class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                            </div>
+                            <div class="space-y-1">
+                                <label for="geminiModel" class="block text-xs font-medium text-blue-900">Model</label>
+                                <input type="text" id="geminiModel" placeholder="gemini-3-flash-preview"
+                                    class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="saveGeminiSettings(true)" class="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">
+                                    Save
+                                </button>
+                                <button onclick="clearGeminiSettings()" class="px-3 py-2 bg-white border border-blue-200 text-blue-900 text-xs font-medium rounded-md hover:bg-blue-100 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                            <p class="text-[11px] text-blue-800">Default model: <code>gemini-3-flash-preview</code></p>
+                        </div>
+                        <div class="mt-3 bg-emerald-50 rounded-lg p-4 space-y-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <h3 class="text-sm font-semibold text-emerald-900">Default Company</h3>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Auto Fill</span>
+                            </div>
+                            <p class="text-xs text-emerald-800">Save your default company name and details to prefill new invoices and bids.</p>
+                            <div class="space-y-1">
+                                <label for="defaultCompanyName" class="block text-xs font-medium text-emerald-900">Company Name</label>
+                                <input type="text" id="defaultCompanyName" placeholder="Jon Smith Services"
+                                    class="w-full px-3 py-2 border border-emerald-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                            </div>
+                            <div class="space-y-1">
+                                <label for="defaultCompanyDetails" class="block text-xs font-medium text-emerald-900">Company Details</label>
+                                <textarea id="defaultCompanyDetails" rows="3" placeholder="44315 Sunshine St&#10;Detroit, MI 48201"
+                                    class="w-full px-3 py-2 border border-emerald-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white resize-y"></textarea>
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="saveDefaultCompanySettings(true)" class="px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-md hover:bg-emerald-700 transition-colors">
+                                    Save
+                                </button>
+                                <button type="button" onclick="clearDefaultCompanySettings()" class="px-3 py-2 bg-white border border-emerald-200 text-emerald-900 text-xs font-medium rounded-md hover:bg-emerald-100 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-700">Import Debug</h4>
+                                <button type="button" onclick="clearImportDebugLog()" class="text-[11px] text-gray-600 hover:text-gray-900 px-2 py-1 border border-gray-300 rounded">
+                                    Clear
+                                </button>
+                            </div>
+                            <textarea id="importDebugLog" rows="9" readonly
+                                class="w-full text-[11px] leading-4 font-mono bg-white border border-gray-300 rounded p-2 text-gray-700 resize-y"
+                                placeholder="Import debug logs appear here..."></textarea>
+                        </div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="generatePDF()" class="header-action-button header-action-download" title="Download PDF" aria-label="Download PDF">
+                        <i class="fas fa-download"></i>
+                        <span class="sr-only">Download PDF</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Editor Sidebar -->
+        <aside class="w-full lg:w-[450px] bg-white border-r border-gray-200 overflow-y-auto custom-scrollbar z-10">
+            <div class="p-6 space-y-8">
+                
+                <!-- Section: Branding -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Company Details</h3>
+                        <label class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                            <i class="fas fa-upload mr-1"></i>Upload Logo
+                            <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload(this)">
+                        </label>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <input type="text" id="companyName" placeholder="Your Company Name" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-semibold"
+                            oninput="scheduleUpdate()">
+                        
+                        <textarea id="companyDetails" placeholder="Address, Phone, Email..." rows="3"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-none"
+                            oninput="scheduleUpdate()"></textarea>
+                    </div>
+                </div>
+
+                <hr class="border-gray-200">
+
+                <!-- Section: Invoice Details -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Invoice Information</h3>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Document Type</label>
+                            <select id="documentType"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+                                onchange="scheduleUpdate()">
+                                <option value="Invoice" selected>Invoice</option>
+                                <option value="Bid">Bid</option>
+                            </select>
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Date</label>
+                            <input type="date" id="invoiceDate" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+                                onchange="scheduleUpdate()">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-gray-200">
+
+                <!-- Section: Client -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Bill To</h3>
+                    
+                    <div class="space-y-3">
+                        <input type="text" id="clientName" placeholder="Client Name" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
+                            oninput="scheduleUpdate()">
+                        
+                        <textarea id="clientDetails" placeholder="Client Address..." rows="3"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+                            oninput="scheduleUpdate()"></textarea>
+                    </div>
+                </div>
+
+                <hr class="border-gray-200">
+
+                <!-- Section: Items -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Line Items</h3>
+                        <button onclick="addLineItem()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+                            <i class="fas fa-plus"></i> Add Item
+                        </button>
+                    </div>
+                    
+                    <div id="lineItemsContainer" class="space-y-3">
+                        <!-- Dynamic items will be inserted here -->
+                    </div>
+                </div>
+
+                <hr class="border-gray-200">
+
+                <!-- Section: Totals -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Summary</h3>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <label class="text-sm text-gray-600">Tax Rate (%)</label>
+                            <input type="number" id="taxRate" value="0" min="0" max="100"
+                                class="w-20 px-2 py-1 border border-gray-300 rounded text-right text-sm"
+                                oninput="scheduleUpdate()">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <label class="text-sm text-gray-600">Discount</label>
+                            <div class="flex items-center gap-2">
+                                <select id="discountType" onchange="scheduleUpdate()" class="text-sm border border-gray-300 rounded px-2 py-1">
+                                    <option value="fixed">$</option>
+                                    <option value="percentage">%</option>
+                                </select>
+                                <input type="number" id="discountValue" value="0" min="0"
+                                    class="w-20 px-2 py-1 border border-gray-300 rounded text-right text-sm"
+                                    oninput="scheduleUpdate()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-gray-200">
+
+                <!-- Section: Notes -->
+                <div class="space-y-4">
+                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Additional Notes</h3>
+                    <textarea id="notes" placeholder="Payment terms, thank you note, etc..." rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+                        oninput="scheduleUpdate()"></textarea>
+                </div>
+
+                <!-- Section: Template Actions -->
+                <div class="bg-indigo-50 rounded-lg p-4 space-y-3">
+                    <h3 class="text-sm font-semibold text-indigo-900">Save Template</h3>
+                    <p class="text-xs text-indigo-700">Save current invoice as a template for future use</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="templateName" placeholder="Template name (e.g., Web Design)" 
+                            class="flex-1 px-3 py-2 border border-indigo-200 rounded-md text-sm focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="saveTemplate()" class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors">
+                            Save
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- Preview Area -->
+        <main id="previewPane" class="hidden lg:flex flex-1 bg-gray-100 overflow-y-auto p-4 lg:p-8 justify-center items-start">
+            <button id="mobilePreviewCloseButton" type="button" aria-label="Close preview" onclick="closeMobilePreview()" class="hidden lg:hidden fixed top-4 right-4 z-50 h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md hover:bg-gray-100">
+                <i class="fas fa-times"></i>
+            </button>
+            <div id="mobilePreviewScaleWrap" class="w-full flex justify-center">
+                <div id="invoice-preview" class="a4-paper p-8 lg:p-12 text-gray-900">
+                    <!-- Invoice Content -->
+                    <div class="h-full flex flex-col">
+                        
+                        <!-- Header -->
+                        <div class="flex justify-between items-start mb-12">
+                            <div class="flex-1">
+                                <div id="previewLogo" class="hidden mb-4 max-w-[200px] max-h-[100px] object-contain"></div>
+                                <h2 id="previewCompanyName" class="text-2xl font-bold text-gray-900 mb-2 invoice-header-font"></h2>
+                                <div id="previewCompanyDetails" class="text-sm text-gray-600 whitespace-pre-line"></div>
+                            </div>
+                            <div class="text-right">
+                                <h1 id="previewDocumentType" class="text-4xl font-bold text-gray-300 mb-2 invoice-header-font tracking-tight">INVOICE</h1>
+                                <div class="space-y-1 text-sm">
+                                    <div class="flex justify-end gap-4">
+                                        <span class="text-gray-500">Date:</span>
+                                        <span id="previewInvoiceDate" class="font-medium"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Client Info -->
+                        <div class="mb-12">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Bill To</h3>
+                            <h4 id="previewClientName" class="text-lg font-semibold text-gray-900 mb-1"></h4>
+                            <div id="previewClientDetails" class="text-sm text-gray-600 whitespace-pre-line"></div>
+                        </div>
+
+                        <!-- Items Table -->
+                        <div class="flex-1 mb-12">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b-2 border-gray-900">
+                                        <th class="py-3 text-xs font-bold text-gray-900 uppercase tracking-wider w-1/2">Description</th>
+                                        <th class="py-3 text-xs font-bold text-gray-900 uppercase tracking-wider text-right">Qty</th>
+                                        <th class="py-3 text-xs font-bold text-gray-900 uppercase tracking-wider text-right">Rate</th>
+                                        <th class="py-3 text-xs font-bold text-gray-900 uppercase tracking-wider text-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="previewItemsList" class="text-sm">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Totals -->
+                        <div class="flex justify-end mb-12">
+                            <div class="w-64 space-y-2">
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-gray-600">Subtotal</span>
+                                    <span id="previewSubtotal" class="font-medium">$0.00</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-gray-600">Tax (<span id="previewTaxRate">0</span>%)</span>
+                                    <span id="previewTaxAmount" class="font-medium">$0.00</span>
+                                </div>
+                                <div class="flex justify-between text-sm" id="previewDiscountRow" style="display: none;">
+                                    <span class="text-gray-600">Discount</span>
+                                    <span id="previewDiscountAmount" class="font-medium text-red-600">-$0.00</span>
+                                </div>
+                                <div class="flex justify-between text-lg font-bold border-t-2 border-gray-900 pt-2 mt-2">
+                                    <span>Total</span>
+                                    <span id="previewTotal">$0.00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notes -->
+                        <div id="previewNotesSection" class="mt-auto pt-8 border-t border-gray-200 hidden">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Notes</h3>
+                            <div id="previewNotes" class="text-sm text-gray-600 whitespace-pre-line"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Template Manager Modal -->
+    <div id="templateModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-900">Saved Templates</h2>
+                <button onclick="closeTemplateManager()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1">
+                <div id="templatesList" class="grid gap-4">
+                    <!-- Templates will be rendered here -->
+                </div>
+                <div id="noTemplates" class="text-center py-12 text-gray-500 hidden">
+                    <i class="fas fa-folder-open text-4xl mb-3 text-gray-300"></i>
+                    <p>No saved templates yet</p>
+                </div>
+            </div>
+            <div class="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                <button onclick="closeTemplateManager()" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
+        <i class="fas fa-check-circle text-green-400"></i>
+        <span id="toastMessage">Action completed</span>
+    </div>
+
+    <script src="./js/modules/invoice-core.js"></script>
+    <script src="./js/modules/invoice-parsers.js"></script>
+    <script src="./js/modules/invoice-import.js"></script>
+    <script src="./js/modules/invoice-ui.js"></script>
+    <script src="./js/service-worker-registration.js"></script>
+</body>
+</html>
