@@ -243,6 +243,16 @@ video {
             padding: 0.9rem;
         }
 
+        .mobile-action-sheet-scrim {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.42);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 42;
+        }
+
         /* Mobile preview overlay */
         body.mobile-preview-open {
             overflow: hidden;
@@ -276,12 +286,6 @@ video {
         margin-left: 0;
     }
 
-    .header-secondary-row {
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 0.05rem;
-    }
-
     header h1 {
         font-size: 1.4rem;
         line-height: 1.2;
@@ -309,6 +313,54 @@ video {
             textarea,
             select {
                 font-size: 16px;
+            }
+        }
+
+        @media screen and (max-width: 1023px) {
+            .header-secondary-row {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 43;
+                background: #ffffff;
+                border-top: 1px solid #e5e7eb;
+                border-radius: 1.25rem 1.25rem 0 0;
+                box-shadow: 0 -14px 34px rgba(15, 23, 42, 0.18);
+                padding: 0.95rem 0.9rem calc(0.95rem + env(safe-area-inset-bottom));
+                transform: translateY(calc(100% + env(safe-area-inset-bottom)));
+                opacity: 0;
+                pointer-events: none;
+                transition: transform 0.24s ease, opacity 0.24s ease;
+            }
+
+            .header-secondary-row .header-action-group {
+                width: 100%;
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 0.6rem;
+            }
+
+            .header-secondary-row .header-action-button,
+            .header-secondary-row label.header-action-button {
+                width: 100%;
+            }
+
+            body.mobile-action-sheet-open .header-secondary-row {
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            body.mobile-action-sheet-open .mobile-action-sheet-scrim {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        @media screen and (min-width: 1024px) {
+            .mobile-action-sheet-scrim {
+                display: none;
             }
         }
 

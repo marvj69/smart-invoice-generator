@@ -510,6 +510,7 @@
 
             if (shouldOpen) {
                 closeSettingsMenu();
+                closeMobileActionSheet();
                 requestAnimationFrame(() => {
                     updateChatTemplatePanelLayout();
                     const input = document.getElementById('chatToTemplateInput');

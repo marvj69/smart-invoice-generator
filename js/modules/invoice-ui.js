@@ -137,6 +137,7 @@
                 closeSettingsMenu();
                 closeMobilePreview();
                 closeChatTemplateBubble();
+                closeMobileActionSheet();
             }
         });
 
