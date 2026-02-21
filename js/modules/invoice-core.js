@@ -467,6 +467,28 @@
             if (button) button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
             if (willOpen) {
                 closeChatTemplateBubble();
+                closeMobileActionSheet();
+            }
+        }
+
+
+        function closeMobileActionSheet() {
+            document.body.classList.remove('mobile-action-sheet-open');
+            const trigger = document.getElementById('mobileActionSheetTrigger');
+            if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleMobileActionSheet(forceOpen) {
+            if (typeof forceOpen === 'boolean') {
+                document.body.classList.toggle('mobile-action-sheet-open', forceOpen);
+            } else {
+                document.body.classList.toggle('mobile-action-sheet-open');
+            }
+            const isOpen = document.body.classList.contains('mobile-action-sheet-open');
+            const trigger = document.getElementById('mobileActionSheetTrigger');
+            if (trigger) trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            if (isOpen) {
+                closeMobilePreview();
             }
         }
 
@@ -499,6 +521,11 @@
             }
             window.addEventListener('resize', updateAppViewportHeight, { passive: true });
             window.addEventListener('orientationchange', updateAppViewportHeight, { passive: true });
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 1024) {
+                    closeMobileActionSheet();
+                }
+            }, { passive: true });
 
             document.addEventListener('gesturestart', (event) => {
                 event.preventDefault();
@@ -551,6 +578,7 @@
             updateInvoice();
             closeSettingsMenu();
             closeChatTemplateBubble();
+            closeMobileActionSheet();
             mobilePreviewOpen = true;
             document.body.classList.add('mobile-preview-open');
             requestAnimationFrame(applyMobilePreviewScale);

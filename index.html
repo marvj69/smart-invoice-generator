@@ -52,10 +52,14 @@
                         <i class="fas fa-download"></i>
                         <span class="sr-only">Download PDF</span>
                     </button>
+                    <button type="button" onclick="toggleMobileActionSheet(true)" class="lg:hidden header-action-button" title="More actions" aria-label="More actions" aria-controls="mobileActionSheet" aria-expanded="false" id="mobileActionSheetTrigger">
+                        <i class="fas fa-ellipsis"></i>
+                        <span class="sr-only">More</span>
+                    </button>
                 </div>
             </div>
 
-            <div class="header-secondary-row">
+            <div id="mobileActionSheet" class="header-secondary-row">
                 <div class="header-action-group">
                     <label class="header-action-button cursor-pointer" title="Import invoice">
                         <i class="fas fa-file-import"></i>
@@ -169,6 +173,8 @@
             </div>
         </div>
     </header>
+
+    <div id="mobileActionSheetScrim" class="mobile-action-sheet-scrim lg:hidden" onclick="toggleMobileActionSheet(false)" aria-hidden="true"></div>
 
     <!-- Main Content -->
     <div class="flex-1 flex overflow-hidden">
