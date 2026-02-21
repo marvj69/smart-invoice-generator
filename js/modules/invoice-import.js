@@ -458,28 +458,16 @@
                 return;
             }
 
-            const widthCap = Math.max(240, viewportWidth - (CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING * 2));
-            const panelWidth = Math.min(CHAT_TEMPLATE_PANEL_MAX_WIDTH, widthCap);
             panel.style.position = 'fixed';
-            panel.style.left = 'auto';
-            panel.style.right = `${CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING}px`;
-            panel.style.bottom = 'auto';
+            panel.style.left = '0';
+            panel.style.right = '0';
+            panel.style.top = 'auto';
+            panel.style.bottom = '0';
             panel.style.zIndex = '50';
-            panel.style.width = `${panelWidth}px`;
-            panel.style.maxWidth = `${panelWidth}px`;
-
-            const buttonRect = button ? button.getBoundingClientRect() : null;
-            const preferredTop = Math.round((buttonRect ? buttonRect.bottom : CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING) + CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING);
-            const maxTop = Math.max(
-                CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING,
-                viewportHeight - CHAT_TEMPLATE_PANEL_MIN_VISIBLE_HEIGHT - CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING
-            );
-            const topEdge = Math.min(Math.max(preferredTop, CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING), maxTop);
-            panel.style.top = `${topEdge}px`;
-            panel.style.maxHeight = `${Math.max(
-                CHAT_TEMPLATE_PANEL_MIN_VISIBLE_HEIGHT,
-                viewportHeight - topEdge - CHAT_TEMPLATE_PANEL_VIEWPORT_PADDING
-            )}px`;
+            panel.style.width = '100%';
+            panel.style.maxWidth = '100%';
+            panel.style.maxHeight = '85vh';
+            panel.style.transform = '';
         }
 
         function handleChatTemplateViewportResize() {
@@ -501,16 +489,19 @@
             const button = document.getElementById('chatTemplateToggle');
             if (!panel || !button) return;
 
+            const wasOpen = !panel.classList.contains('hidden');
             const shouldOpen = typeof eventOrForceOpen === 'boolean'
                 ? eventOrForceOpen
-                : panel.classList.contains('hidden');
+                : !wasOpen;
 
             panel.classList.toggle('hidden', !shouldOpen);
             button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
 
             if (shouldOpen) {
                 closeSettingsMenu();
-                closeMobileActionSheet();
+                if (window.innerWidth >= 1024) {
+                    closeMobileActionSheet();
+                }
                 requestAnimationFrame(() => {
                     updateChatTemplatePanelLayout();
                     const input = document.getElementById('chatToTemplateInput');
@@ -520,6 +511,9 @@
                 });
             } else {
                 resetChatTemplatePanelLayout(panel);
+                if (wasOpen && window.innerWidth < 1024) {
+                    closeMobileActionSheet();
+                }
             }
         }
 

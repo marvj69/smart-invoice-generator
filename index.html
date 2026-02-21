@@ -6,7 +6,7 @@
     <title>Pro Invoice Generator</title>
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Invoices">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
@@ -34,15 +34,15 @@
 <body class="text-gray-800 h-screen flex flex-col overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200 shadow-sm z-20">
+    <header class="bg-white border-b border-gray-200 shadow-sm z-50">
         <div class="header-shell max-w-full mx-auto px-3 sm:px-6 lg:px-8 py-3">
             <div class="header-top-row">
                 <div class="header-brand flex min-w-0 items-center gap-3 sm:gap-4">
-                <div class="w-12 h-12 sm:w-14 sm:h-14 gradient-bg rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
-                    <i class="fas fa-file-invoice text-2xl"></i>
+                <div class="header-brand-icon gradient-bg rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
+                    <i class="fas fa-file-invoice"></i>
                 </div>
                 <div class="min-w-0">
-                    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight leading-tight truncate">Invoice Generator</h1>
+                    <h1 class="header-title font-bold text-gray-900 tracking-tight leading-tight truncate">Invoice Generator</h1>
                     <p class="hidden md:block text-sm text-gray-500 truncate">Create professional invoices in seconds</p>
                 </div>
             </div>
@@ -52,7 +52,7 @@
                         <i class="fas fa-download"></i>
                         <span class="sr-only">Download PDF</span>
                     </button>
-                    <button type="button" onclick="toggleMobileActionSheet(true)" class="lg:hidden header-action-button" title="More actions" aria-label="More actions" aria-controls="mobileActionSheet" aria-expanded="false" id="mobileActionSheetTrigger">
+                    <button type="button" onclick="toggleMobileActionSheet()" class="lg:hidden header-action-button" title="More actions" aria-label="More actions" aria-controls="mobileActionSheet" aria-expanded="false" id="mobileActionSheetTrigger">
                         <i class="fas fa-ellipsis"></i>
                         <span class="sr-only">More</span>
                     </button>
@@ -60,23 +60,33 @@
             </div>
 
             <div id="mobileActionSheet" class="header-secondary-row">
+                <div class="action-sheet-handle" aria-hidden="true"></div>
                 <div class="header-action-group">
                     <label class="header-action-button cursor-pointer" title="Import invoice">
                         <i class="fas fa-file-import"></i>
+                        <span class="action-sheet-label">Import</span>
                         <span class="sr-only">Import</span>
                         <input type="file" id="invoiceImportInput" accept=".pdf,.json,.txt,.html,.htm,.csv" class="hidden" onchange="handleInvoiceUpload(this)">
                     </label>
                     <button type="button" onclick="openTemplateManager()" class="header-action-button" title="Saved templates" aria-label="Saved templates">
                         <i class="fas fa-folder-open"></i>
+                        <span class="action-sheet-label">Templates</span>
                         <span class="sr-only">Templates</span>
+                    </button>
+                    <button type="button" onclick="clearInvoice()" class="header-action-button header-action-clear" title="Clear invoice" aria-label="Clear invoice">
+                        <i class="fas fa-rotate-left"></i>
+                        <span class="action-sheet-label">Clear</span>
+                        <span class="sr-only">Clear invoice</span>
                     </button>
                     <button id="mobilePreviewButton" type="button" aria-label="Preview invoice" onclick="openMobilePreview()" class="lg:hidden header-action-button" title="Preview invoice">
                         <i class="fas fa-eye"></i>
+                        <span class="action-sheet-label">Preview</span>
                         <span class="sr-only">Preview</span>
                     </button>
                     <div id="chatTemplateMenuWrapper" class="relative">
                         <button id="chatTemplateToggle" type="button" aria-label="Chat to template" aria-haspopup="true" aria-expanded="false" aria-controls="chatTemplatePanel" onclick="toggleChatTemplateBubble(event)" class="header-action-button header-action-ai" title="Chat to template">
                             <span class="chat-template-ai-icon" aria-hidden="true"></span>
+                            <span class="action-sheet-label">AI Chat</span>
                         </button>
                         <div id="chatTemplatePanel" class="chat-template-panel hidden absolute right-0 mt-3 z-40">
                             <div class="flex items-center justify-between gap-2">
@@ -100,74 +110,11 @@
                         </div>
                     </div>
                     <div id="settingsMenuWrapper" class="relative">
-                        <button id="settingsMenuButton" type="button" aria-label="Open settings" aria-haspopup="true" aria-expanded="false" onclick="toggleSettingsMenu(event)" class="header-action-button" title="Settings">
+                        <button id="settingsMenuButton" type="button" aria-label="Open settings" aria-haspopup="dialog" aria-controls="settingsMenu" aria-expanded="false" onclick="toggleSettingsMenu(event)" class="header-action-button" title="Settings">
                             <i class="fas fa-gear"></i>
+                            <span class="action-sheet-label">Settings</span>
                             <span class="sr-only">Settings</span>
                         </button>
-                        <div id="settingsMenu" class="hidden absolute right-0 mt-3 w-[340px] max-w-[calc(100vw-1rem)] bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-40">
-                        <div class="bg-blue-50 rounded-lg p-4 space-y-3">
-                            <div class="flex items-center justify-between gap-2">
-                                <h3 class="text-sm font-semibold text-blue-900">Gemini Import + Chat</h3>
-                                <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-1 rounded">Vision LLM</span>
-                            </div>
-                            <p class="text-xs text-blue-800">PDF imports and chat parsing are sent directly from your browser to Gemini using your API key.</p>
-                            <div class="space-y-1">
-                                <label for="geminiApiKey" class="block text-xs font-medium text-blue-900">Gemini API Key</label>
-                                <input type="password" id="geminiApiKey" placeholder="AIza..." autocomplete="off"
-                                    class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
-                            </div>
-                            <div class="space-y-1">
-                                <label for="geminiModel" class="block text-xs font-medium text-blue-900">Model</label>
-                                <input type="text" id="geminiModel" placeholder="gemini-3-flash-preview"
-                                    class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
-                            </div>
-                            <div class="flex gap-2">
-                                <button onclick="saveGeminiSettings(true)" class="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">
-                                    Save
-                                </button>
-                                <button onclick="clearGeminiSettings()" class="px-3 py-2 bg-white border border-blue-200 text-blue-900 text-xs font-medium rounded-md hover:bg-blue-100 transition-colors">
-                                    Clear
-                                </button>
-                            </div>
-                            <p class="text-[11px] text-blue-800">Default model: <code>gemini-3-flash-preview</code></p>
-                        </div>
-                        <div class="mt-3 bg-emerald-50 rounded-lg p-4 space-y-3">
-                            <div class="flex items-center justify-between gap-2">
-                                <h3 class="text-sm font-semibold text-emerald-900">Default Company</h3>
-                                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Auto Fill</span>
-                            </div>
-                            <p class="text-xs text-emerald-800">Save your default company name and details to prefill new invoices and bids.</p>
-                            <div class="space-y-1">
-                                <label for="defaultCompanyName" class="block text-xs font-medium text-emerald-900">Company Name</label>
-                                <input type="text" id="defaultCompanyName" placeholder="Jon Smith Services"
-                                    class="w-full px-3 py-2 border border-emerald-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
-                            </div>
-                            <div class="space-y-1">
-                                <label for="defaultCompanyDetails" class="block text-xs font-medium text-emerald-900">Company Details</label>
-                                <textarea id="defaultCompanyDetails" rows="3" placeholder="44315 Sunshine St&#10;Detroit, MI 48201"
-                                    class="w-full px-3 py-2 border border-emerald-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white resize-y"></textarea>
-                            </div>
-                            <div class="flex gap-2">
-                                <button type="button" onclick="saveDefaultCompanySettings(true)" class="px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-md hover:bg-emerald-700 transition-colors">
-                                    Save
-                                </button>
-                                <button type="button" onclick="clearDefaultCompanySettings()" class="px-3 py-2 bg-white border border-emerald-200 text-emerald-900 text-xs font-medium rounded-md hover:bg-emerald-100 transition-colors">
-                                    Clear
-                                </button>
-                            </div>
-                        </div>
-                        <div class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-700">Import Debug</h4>
-                                <button type="button" onclick="clearImportDebugLog()" class="text-[11px] text-gray-600 hover:text-gray-900 px-2 py-1 border border-gray-300 rounded">
-                                    Clear
-                                </button>
-                            </div>
-                            <textarea id="importDebugLog" rows="9" readonly
-                                class="w-full text-[11px] leading-4 font-mono bg-white border border-gray-300 rounded p-2 text-gray-700 resize-y"
-                                placeholder="Import debug logs appear here..."></textarea>
-                        </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -181,35 +128,47 @@
         
         <!-- Editor Sidebar -->
         <aside class="w-full lg:w-[450px] bg-white border-r border-gray-200 overflow-y-auto custom-scrollbar z-10">
-            <div class="p-6 space-y-8">
-                
+            <!-- Mobile Section Navigation -->
+            <nav id="sectionNav" class="section-nav" aria-label="Form sections">
+                <button class="section-nav-pill active" data-target="sectionCompany"><i class="fas fa-building"></i><span>Company</span></button>
+                <button class="section-nav-pill" data-target="sectionInvoice"><i class="fas fa-file-lines"></i><span>Invoice</span></button>
+                <button class="section-nav-pill" data-target="sectionClient"><i class="fas fa-user"></i><span>Client</span></button>
+                <button class="section-nav-pill" data-target="sectionItems"><i class="fas fa-list-check"></i><span>Items</span></button>
+                <button class="section-nav-pill" data-target="sectionSummary"><i class="fas fa-calculator"></i><span>Summary</span></button>
+                <button class="section-nav-pill" data-target="sectionNotes"><i class="fas fa-sticky-note"></i><span>Notes</span></button>
+            </nav>
+
+            <div class="p-6 mobile-form-area">
+
                 <!-- Section: Branding -->
-                <div class="space-y-4">
-                    <div class="flex items-center justify-between">
+                <div class="mobile-section-card" data-section="company" id="sectionCompany">
+                    <div class="mobile-section-header">
+                        <span class="mobile-section-icon"><i class="fas fa-building"></i></span>
                         <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Company Details</h3>
-                        <label class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                        <label class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 font-medium ml-auto">
                             <i class="fas fa-upload mr-1"></i>Upload Logo
                             <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="handleLogoUpload(this)">
                         </label>
                     </div>
-                    
+
                     <div class="space-y-3">
-                        <input type="text" id="companyName" placeholder="Your Company Name" 
+                        <input type="text" id="companyName" placeholder="Your Company Name"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-semibold"
                             oninput="scheduleUpdate()">
-                        
+
                         <textarea id="companyDetails" placeholder="Address, Phone, Email..." rows="3"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-none"
                             oninput="scheduleUpdate()"></textarea>
                     </div>
                 </div>
 
-                <hr class="border-gray-200">
-
                 <!-- Section: Invoice Details -->
-                <div class="space-y-4">
-                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Invoice Information</h3>
-                    
+                <div class="mobile-section-card" data-section="invoice" id="sectionInvoice">
+                    <div class="mobile-section-header">
+                        <span class="mobile-section-icon"><i class="fas fa-file-lines"></i></span>
+                        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Invoice Information</h3>
+                    </div>
+
                     <div class="grid grid-cols-2 gap-3">
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-700 mb-1">Document Type</label>
@@ -222,52 +181,55 @@
                         </div>
                         <div class="col-span-2">
                             <label class="block text-xs font-medium text-gray-700 mb-1">Date</label>
-                            <input type="date" id="invoiceDate" 
+                            <input type="date" id="invoiceDate"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
                                 onchange="scheduleUpdate()">
                         </div>
                     </div>
                 </div>
 
-                <hr class="border-gray-200">
-
                 <!-- Section: Client -->
-                <div class="space-y-4">
-                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Bill To</h3>
-                    
+                <div class="mobile-section-card" data-section="client" id="sectionClient">
+                    <div class="mobile-section-header">
+                        <span class="mobile-section-icon"><i class="fas fa-user"></i></span>
+                        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Bill To</h3>
+                    </div>
+
                     <div class="space-y-3">
-                        <input type="text" id="clientName" placeholder="Client Name" 
+                        <input type="text" id="clientName" placeholder="Client Name"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
                             oninput="scheduleUpdate()">
-                        
+
                         <textarea id="clientDetails" placeholder="Client Address..." rows="3"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
                             oninput="scheduleUpdate()"></textarea>
                     </div>
                 </div>
 
-                <hr class="border-gray-200">
-
                 <!-- Section: Items -->
-                <div class="space-y-4">
-                    <div class="flex items-center justify-between">
+                <div class="mobile-section-card" data-section="items" id="sectionItems">
+                    <div class="mobile-section-header">
+                        <span class="mobile-section-icon"><i class="fas fa-list-check"></i></span>
                         <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Line Items</h3>
-                        <button onclick="addLineItem()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
-                            <i class="fas fa-plus"></i> Add Item
-                        </button>
                     </div>
-                    
+
                     <div id="lineItemsContainer" class="space-y-3">
                         <!-- Dynamic items will be inserted here -->
                     </div>
+                    <div class="mt-3 flex justify-end">
+                        <button type="button" onclick="addLineItem()" class="add-item-button text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+                            <i class="fas fa-plus"></i> Add Item
+                        </button>
+                    </div>
                 </div>
 
-                <hr class="border-gray-200">
-
                 <!-- Section: Totals -->
-                <div class="space-y-4">
-                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Summary</h3>
-                    
+                <div class="mobile-section-card" data-section="summary" id="sectionSummary">
+                    <div class="mobile-section-header">
+                        <span class="mobile-section-icon"><i class="fas fa-calculator"></i></span>
+                        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Summary</h3>
+                    </div>
+
                     <div class="space-y-3">
                         <div class="flex items-center justify-between">
                             <label class="text-sm text-gray-600">Tax Rate (%)</label>
@@ -290,22 +252,23 @@
                     </div>
                 </div>
 
-                <hr class="border-gray-200">
-
                 <!-- Section: Notes -->
-                <div class="space-y-4">
-                    <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Additional Notes</h3>
+                <div class="mobile-section-card" data-section="notes" id="sectionNotes">
+                    <div class="mobile-section-header">
+                        <span class="mobile-section-icon"><i class="fas fa-sticky-note"></i></span>
+                        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Additional Notes</h3>
+                    </div>
                     <textarea id="notes" placeholder="Payment terms, thank you note, etc..." rows="3"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
                         oninput="scheduleUpdate()"></textarea>
                 </div>
 
                 <!-- Section: Template Actions -->
-                <div class="bg-indigo-50 rounded-lg p-4 space-y-3">
+                <div class="bg-indigo-50 rounded-lg p-4 space-y-3 mb-10">
                     <h3 class="text-sm font-semibold text-indigo-900">Save Template</h3>
                     <p class="text-xs text-indigo-700">Save current invoice as a template for future use</p>
                     <div class="flex gap-2">
-                        <input type="text" id="templateName" placeholder="Template name (e.g., Web Design)" 
+                        <input type="text" id="templateName" placeholder="Template name (e.g., Web Design)"
                             class="flex-1 px-3 py-2 border border-indigo-200 rounded-md text-sm focus:ring-2 focus:ring-indigo-500">
                         <button onclick="saveTemplate()" class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors">
                             Save
@@ -318,9 +281,6 @@
 
         <!-- Preview Area -->
         <main id="previewPane" class="hidden lg:flex flex-1 bg-gray-100 overflow-y-auto p-4 lg:p-8 justify-center items-start">
-            <button id="mobilePreviewCloseButton" type="button" aria-label="Close preview" onclick="closeMobilePreview()" class="hidden lg:hidden fixed top-4 right-4 z-50 h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-md hover:bg-gray-100">
-                <i class="fas fa-times"></i>
-            </button>
             <div id="mobilePreviewScaleWrap" class="w-full flex justify-center">
                 <div id="invoice-preview" class="a4-paper p-8 lg:p-12 text-gray-900">
                     <!-- Invoice Content -->
@@ -398,8 +358,90 @@
 
                     </div>
                 </div>
+                <button id="mobilePreviewCloseButton" type="button" aria-label="Close preview" onclick="closeMobilePreview()" class="hidden lg:hidden h-10 w-10 items-center justify-center rounded-full shadow-md" title="Close preview">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
             </div>
         </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsMenu" class="fixed inset-0 z-50 hidden p-4 sm:p-6 settings-modal-backdrop flex items-start sm:items-center justify-center">
+        <div id="settingsMenuDialog" role="dialog" aria-modal="true" aria-labelledby="settingsMenuTitle" class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-gray-200 flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="settingsMenuTitle" class="text-lg sm:text-xl font-bold text-gray-900">Settings</h2>
+                    <p class="text-xs sm:text-sm text-gray-500 mt-1">Manage Gemini and default company details.</p>
+                </div>
+                <button type="button" onclick="closeSettingsMenu()" aria-label="Close settings" class="settings-modal-close text-gray-400 hover:text-gray-700">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-4 sm:p-5 overflow-y-auto space-y-3 sm:space-y-4 bg-slate-50">
+                <div class="bg-blue-50 rounded-lg p-4 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold text-blue-900">Gemini Import + Chat</h3>
+                        <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-1 rounded">Vision LLM</span>
+                    </div>
+                    <p class="text-xs text-blue-800">PDF imports and chat parsing are sent directly from your browser to Gemini using your API key.</p>
+                    <div class="space-y-1">
+                        <label for="geminiApiKey" class="block text-xs font-medium text-blue-900">Gemini API Key</label>
+                        <input type="password" id="geminiApiKey" placeholder="AIza..." autocomplete="off"
+                            class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    </div>
+                    <div class="space-y-1">
+                        <label for="geminiModel" class="block text-xs font-medium text-blue-900">Model</label>
+                        <input type="text" id="geminiModel" placeholder="gemini-3-flash-preview"
+                            class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="saveGeminiSettings(true)" class="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">
+                            Save
+                        </button>
+                        <button onclick="clearGeminiSettings()" class="px-3 py-2 bg-white border border-blue-200 text-blue-900 text-xs font-medium rounded-md hover:bg-blue-100 transition-colors">
+                            Clear
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-blue-800">Default model: <code>gemini-3-flash-preview</code></p>
+                </div>
+                <div class="bg-emerald-50 rounded-lg p-4 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold text-emerald-900">Default Company</h3>
+                        <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Auto Fill</span>
+                    </div>
+                    <p class="text-xs text-emerald-800">Save your default company name and details to prefill new invoices and bids.</p>
+                    <div class="space-y-1">
+                        <label for="defaultCompanyName" class="block text-xs font-medium text-emerald-900">Company Name</label>
+                        <input type="text" id="defaultCompanyName" placeholder="Jon Smith Services"
+                            class="w-full px-3 py-2 border border-emerald-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    </div>
+                    <div class="space-y-1">
+                        <label for="defaultCompanyDetails" class="block text-xs font-medium text-emerald-900">Company Details</label>
+                        <textarea id="defaultCompanyDetails" rows="3" placeholder="44315 Sunshine St&#10;Detroit, MI 48201"
+                            class="w-full px-3 py-2 border border-emerald-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white resize-y"></textarea>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="saveDefaultCompanySettings(true)" class="px-3 py-2 bg-emerald-600 text-white text-xs font-medium rounded-md hover:bg-emerald-700 transition-colors">
+                            Save
+                        </button>
+                        <button type="button" onclick="clearDefaultCompanySettings()" class="px-3 py-2 bg-white border border-emerald-200 text-emerald-900 text-xs font-medium rounded-md hover:bg-emerald-100 transition-colors">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-semibold uppercase tracking-wider text-gray-700">Import Debug</h4>
+                        <button type="button" onclick="clearImportDebugLog()" class="text-[11px] text-gray-600 hover:text-gray-900 px-2 py-1 border border-gray-300 rounded">
+                            Clear
+                        </button>
+                    </div>
+                    <textarea id="importDebugLog" rows="9" readonly
+                        class="w-full text-[11px] leading-4 font-mono bg-white border border-gray-300 rounded p-2 text-gray-700 resize-y"
+                        placeholder="Import debug logs appear here..."></textarea>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Template Manager Modal -->
@@ -407,7 +449,7 @@
         <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
             <div class="p-6 border-b border-gray-200 flex justify-between items-center">
                 <h2 class="text-xl font-bold text-gray-900">Saved Templates</h2>
-                <button onclick="closeTemplateManager()" class="text-gray-400 hover:text-gray-600">
+                <button onclick="closeTemplateManager()" class="template-modal-close text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>

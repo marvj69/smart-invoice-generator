@@ -455,27 +455,52 @@
             const button = document.getElementById('settingsMenuButton');
             if (menu) menu.classList.add('hidden');
             if (button) button.setAttribute('aria-expanded', 'false');
+            document.body.classList.remove('settings-modal-open');
         }
 
-        function toggleSettingsMenu(event) {
-            if (event) event.stopPropagation();
+        function toggleSettingsMenu(eventOrForceOpen) {
+            if (eventOrForceOpen && typeof eventOrForceOpen.stopPropagation === 'function') {
+                eventOrForceOpen.stopPropagation();
+            }
             const menu = document.getElementById('settingsMenu');
             const button = document.getElementById('settingsMenuButton');
             if (!menu) return;
-            const willOpen = menu.classList.contains('hidden');
+            const wasOpen = !menu.classList.contains('hidden');
+            const willOpen = typeof eventOrForceOpen === 'boolean'
+                ? eventOrForceOpen
+                : !wasOpen;
             menu.classList.toggle('hidden', !willOpen);
             if (button) button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
             if (willOpen) {
                 closeChatTemplateBubble();
                 closeMobileActionSheet();
+                document.body.classList.add('settings-modal-open');
+                requestAnimationFrame(() => {
+                    const keyInput = document.getElementById('geminiApiKey');
+                    if (keyInput) keyInput.focus();
+                });
+            } else if (wasOpen) {
+                document.body.classList.remove('settings-modal-open');
+                if (window.innerWidth < 1024) {
+                    closeMobileActionSheet();
+                }
             }
         }
 
 
+        function updateActionSheetIcon(isOpen) {
+            const trigger = document.getElementById('mobileActionSheetTrigger');
+            if (!trigger) return;
+            trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            const icon = trigger.querySelector('i');
+            if (icon) {
+                icon.className = isOpen ? 'fas fa-xmark' : 'fas fa-ellipsis';
+            }
+        }
+
         function closeMobileActionSheet() {
             document.body.classList.remove('mobile-action-sheet-open');
-            const trigger = document.getElementById('mobileActionSheetTrigger');
-            if (trigger) trigger.setAttribute('aria-expanded', 'false');
+            updateActionSheetIcon(false);
         }
 
         function toggleMobileActionSheet(forceOpen) {
@@ -485,8 +510,7 @@
                 document.body.classList.toggle('mobile-action-sheet-open');
             }
             const isOpen = document.body.classList.contains('mobile-action-sheet-open');
-            const trigger = document.getElementById('mobileActionSheetTrigger');
-            if (trigger) trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            updateActionSheetIcon(isOpen);
             if (isOpen) {
                 closeMobilePreview();
             }
@@ -506,6 +530,13 @@
             document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
         }
 
+        function updateHeaderHeight() {
+            const header = document.querySelector('header');
+            if (header) {
+                document.documentElement.style.setProperty('--header-height', `${header.offsetHeight}px`);
+            }
+        }
+
         function preventNativePinchZoom(event) {
             if (event.touches && event.touches.length > 1) {
                 event.preventDefault();
@@ -513,14 +544,18 @@
         }
 
         function setupMobilePwaExperience() {
-            updateAppViewportHeight();
             document.body.classList.toggle('pwa-standalone', isStandalonePwa());
+            const refreshViewportMetrics = () => {
+                updateAppViewportHeight();
+                updateHeaderHeight();
+            };
+            refreshViewportMetrics();
 
             if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
-                window.visualViewport.addEventListener('resize', updateAppViewportHeight);
+                window.visualViewport.addEventListener('resize', refreshViewportMetrics);
             }
-            window.addEventListener('resize', updateAppViewportHeight, { passive: true });
-            window.addEventListener('orientationchange', updateAppViewportHeight, { passive: true });
+            window.addEventListener('resize', refreshViewportMetrics, { passive: true });
+            window.addEventListener('orientationchange', refreshViewportMetrics, { passive: true });
             window.addEventListener('resize', () => {
                 if (window.innerWidth >= 1024) {
                     closeMobileActionSheet();
@@ -723,35 +758,57 @@
         }
 
         // Line Items Management
+        function getLineItemCount() {
+            return document.querySelectorAll('#lineItemsContainer .line-item').length;
+        }
+
+        function renumberLineItems() {
+            const items = document.querySelectorAll('#lineItemsContainer .line-item');
+            items.forEach((item, index) => {
+                const badge = item.querySelector('.line-item-badge');
+                if (badge) badge.textContent = `Item ${index + 1}`;
+            });
+        }
+
         function addLineItem(itemData = null, shouldRefresh = true) {
             const container = document.getElementById('lineItemsContainer');
             const normalizedItem = normalizeLineItem(itemData || getDefaultLineItem());
+            const itemNumber = getLineItemCount() + 1;
 
             const div = document.createElement('div');
             div.className = 'line-item bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2';
             div.innerHTML = `
+                <div class="line-item-header">
+                    <span class="line-item-badge">Item ${itemNumber}</span>
+                    <button onclick="removeLineItem(this)" class="px-2 text-red-500 hover:text-red-700" title="Remove item">
+                        <i class="fas fa-trash-alt text-xs"></i>
+                    </button>
+                </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-600 mb-1">Property Address</label>
-                    <input type="text" placeholder="e.g., 885 County Rd CKL, Champion, MI 49814" 
+                    <input type="text" placeholder="e.g., 885 County Rd CKL, Champion, MI 49814"
                         class="item-address w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500"
                         oninput="scheduleUpdate()">
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-600 mb-1">Work Done</label>
-                    <textarea rows="2" placeholder="e.g., Install handrail for front steps" 
+                    <textarea rows="2" placeholder="e.g., Install handrail for front steps"
                         class="item-work w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 resize-none"
                         oninput="scheduleUpdate()"></textarea>
                 </div>
-                <div class="flex gap-2">
-                    <input type="number" placeholder="Qty" min="0" step="1" value="1"
-                        class="item-qty w-20 px-2 py-1 border border-gray-300 rounded text-sm text-right"
-                        oninput="scheduleUpdate()">
-                    <input type="number" placeholder="Rate" min="0" step="0.01" value="0"
-                        class="item-rate flex-1 px-2 py-1 border border-gray-300 rounded text-sm text-right"
-                        oninput="scheduleUpdate()">
-                    <button onclick="removeLineItem(this)" class="px-2 text-red-500 hover:text-red-700">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                <div class="line-item-numbers">
+                    <div class="line-item-number-field">
+                        <label>Qty</label>
+                        <input type="number" placeholder="Qty" min="0" step="1" value="1"
+                            class="item-qty w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                            oninput="scheduleUpdate()">
+                    </div>
+                    <div class="line-item-number-field">
+                        <label>Rate</label>
+                        <input type="number" placeholder="Rate" min="0" step="0.01" value="0"
+                            class="item-rate w-full px-2 py-1 border border-gray-300 rounded text-sm text-right"
+                            oninput="scheduleUpdate()">
+                    </div>
                 </div>
             `;
 
@@ -770,6 +827,7 @@
             const items = document.querySelectorAll('.line-item');
             if (items.length > 1) {
                 btn.closest('.line-item').remove();
+                renumberLineItems();
                 updateInvoice();
             } else {
                 showToast('At least one item is required', 'error');
@@ -787,6 +845,24 @@
                 };
                 reader.readAsDataURL(input.files[0]);
             }
+        }
+
+        function clearInvoice() {
+            if (!confirm('Clear this invoice and start over?')) return;
+
+            applyInvoiceDataToForm(getDefaultInvoiceData());
+
+            const logoInput = document.getElementById('logoInput');
+            const importInput = document.getElementById('invoiceImportInput');
+            const templateNameInput = document.getElementById('templateName');
+            if (logoInput) logoInput.value = '';
+            if (importInput) importInput.value = '';
+            if (templateNameInput) templateNameInput.value = '';
+
+            closeSettingsMenu();
+            closeChatTemplateBubble();
+            closeMobileActionSheet();
+            showToast('Invoice cleared', 'info');
         }
 
         // PDF Generation
