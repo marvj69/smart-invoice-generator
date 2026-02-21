@@ -2,19 +2,32 @@
             --app-height: 100vh;
         }
 
-        html,
-        body {
-            height: 100%;
-        }
+html,
+body {
+    height: 100%;
+    width: 100%;
+    overflow-x: clip;
+}
 
-        body {
+body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
             min-height: var(--app-height);
             overscroll-behavior-y: none;
             -webkit-text-size-adjust: 100%;
-            touch-action: manipulation;
-        }
+    touch-action: manipulation;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+    max-width: 100%;
+}
 
         aside,
         #previewPane,
@@ -205,24 +218,39 @@
             overflow: hidden;
         }
 
-        @media screen and (max-width: 640px) {
-            header {
-                padding-top: env(safe-area-inset-top);
-            }
+@media screen and (max-width: 640px) {
+    header {
+        padding-top: max(0.5rem, env(safe-area-inset-top));
+    }
 
-            body {
-                padding-bottom: env(safe-area-inset-bottom);
-            }
+    body {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    header > div {
+        min-height: 72px;
+        padding-top: 0.55rem;
+        padding-bottom: 0.55rem;
+    }
+
+    header h1 {
+        font-size: 1.4rem;
+        line-height: 1.2;
+    }
 
             .header-action-group {
                 gap: 0.45rem;
             }
 
-            .header-action-button {
-                width: 2.6rem;
-                height: 2.6rem;
-                border-radius: 0.8rem;
-            }
+    .header-action-button {
+        width: 2.45rem;
+        height: 2.45rem;
+        border-radius: 0.8rem;
+    }
+
+    .header-action-button i {
+        font-size: 1rem;
+    }
 
             #chatToTemplateInput {
                 font-size: 16px;
