@@ -6,7 +6,8 @@ html,
 body {
     height: 100%;
     width: 100%;
-    overflow-x: clip;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 body {
@@ -15,7 +16,7 @@ body {
             min-height: var(--app-height);
             overscroll-behavior-y: none;
             -webkit-text-size-adjust: 100%;
-    touch-action: manipulation;
+    touch-action: pan-y;
 }
 
 * {
