@@ -474,6 +474,39 @@
             return window.innerWidth < MOBILE_PREVIEW_BREAKPOINT;
         }
 
+        function isStandalonePwa() {
+            return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        }
+
+        function updateAppViewportHeight() {
+            const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            if (!viewportHeight) return;
+            document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
+        }
+
+        function preventNativePinchZoom(event) {
+            if (event.touches && event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }
+
+        function setupMobilePwaExperience() {
+            updateAppViewportHeight();
+            document.body.classList.toggle('pwa-standalone', isStandalonePwa());
+
+            if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
+                window.visualViewport.addEventListener('resize', updateAppViewportHeight);
+            }
+            window.addEventListener('resize', updateAppViewportHeight, { passive: true });
+            window.addEventListener('orientationchange', updateAppViewportHeight, { passive: true });
+
+            document.addEventListener('gesturestart', (event) => {
+                event.preventDefault();
+            }, { passive: false });
+
+            document.addEventListener('touchmove', preventNativePinchZoom, { passive: false });
+        }
+
         function resetMobilePreviewScale() {
             const preview = document.getElementById('invoice-preview');
             const wrap = document.getElementById('mobilePreviewScaleWrap');
@@ -531,6 +564,7 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            setupMobilePwaExperience();
             loadGeminiSettings();
             loadDefaultCompanySettings();
             applyInvoiceDataToForm(invoiceData);

@@ -1,6 +1,26 @@
-body {
+:root {
+            --app-height: 100vh;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
+            min-height: var(--app-height);
+            overscroll-behavior-y: none;
+            -webkit-text-size-adjust: 100%;
+            touch-action: manipulation;
+        }
+
+        aside,
+        #previewPane,
+        .chat-template-panel {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
         }
         
         .invoice-font {
@@ -186,6 +206,14 @@ body {
         }
 
         @media screen and (max-width: 640px) {
+            header {
+                padding-top: env(safe-area-inset-top);
+            }
+
+            body {
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+
             .header-action-group {
                 gap: 0.45rem;
             }
@@ -197,6 +225,12 @@ body {
             }
 
             #chatToTemplateInput {
+                font-size: 16px;
+            }
+
+            input,
+            textarea,
+            select {
                 font-size: 16px;
             }
         }
@@ -213,6 +247,10 @@ body {
                 overflow-x: hidden;
                 padding: 1rem 0.75rem 1.25rem;
                 background-color: #f3f4f6;
+                height: var(--app-height);
+                min-height: var(--app-height);
+                padding-top: calc(env(safe-area-inset-top) + 1rem);
+                padding-bottom: calc(env(safe-area-inset-bottom) + 1.25rem);
             }
 
             body.mobile-preview-open #mobilePreviewScaleWrap {
