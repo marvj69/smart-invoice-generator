@@ -35,8 +35,9 @@
 
     <!-- Header -->
     <header class="bg-white border-b border-gray-200 shadow-sm z-20">
-        <div class="max-w-full mx-auto px-3 sm:px-6 lg:px-8 min-h-[88px] py-3 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-            <div class="flex min-w-0 items-center gap-3 sm:gap-4">
+        <div class="header-shell max-w-full mx-auto px-3 sm:px-6 lg:px-8 py-3">
+            <div class="header-top-row">
+                <div class="header-brand flex min-w-0 items-center gap-3 sm:gap-4">
                 <div class="w-12 h-12 sm:w-14 sm:h-14 gradient-bg rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
                     <i class="fas fa-file-invoice text-2xl"></i>
                 </div>
@@ -45,8 +46,16 @@
                     <p class="hidden md:block text-sm text-gray-500 truncate">Create professional invoices in seconds</p>
                 </div>
             </div>
-            
-            <div class="ml-auto flex items-center gap-2 sm:gap-3">
+
+                <div class="header-primary-actions">
+                    <button type="button" onclick="generatePDF()" class="header-action-button header-action-download" title="Download PDF" aria-label="Download PDF">
+                        <i class="fas fa-download"></i>
+                        <span class="sr-only">Download PDF</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="header-secondary-row">
                 <div class="header-action-group">
                     <label class="header-action-button cursor-pointer" title="Import invoice">
                         <i class="fas fa-file-import"></i>
@@ -156,10 +165,6 @@
                         </div>
                         </div>
                     </div>
-                    <button type="button" onclick="generatePDF()" class="header-action-button header-action-download" title="Download PDF" aria-label="Download PDF">
-                        <i class="fas fa-download"></i>
-                        <span class="sr-only">Download PDF</span>
-                    </button>
                 </div>
             </div>
         </div>
