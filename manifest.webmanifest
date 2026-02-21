@@ -1,9 +1,9 @@
 {
-  "id": "./index.html",
+  "id": "./",
   "name": "Pro Invoice Generator",
   "short_name": "Invoices",
   "description": "Create professional invoices in seconds.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f3f4f6",

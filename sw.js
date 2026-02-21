@@ -1,10 +1,11 @@
-const APP_CACHE = "invoice-generator-v2-shell-v5";
-const RUNTIME_CACHE = "invoice-generator-v2-runtime-v5";
+const APP_CACHE = "invoice-generator-v2-shell-v6";
+const RUNTIME_CACHE = "invoice-generator-v2-runtime-v6";
 const CACHE_PREFIX = "invoice-generator-v2-";
 const OFFLINE_FALLBACK = "./index.html";
 
 const APP_SHELL_FILES = [
   "./index.html",
+  "./404.html",
   "./manifest.webmanifest",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
@@ -58,7 +59,12 @@ self.addEventListener("message", (event) => {
 
 async function networkFirst(request) {
   try {
-    return await fetchAndCache(request);
+    const response = await fetchAndCache(request);
+    if (!response || !response.ok) {
+      throw new Error(`Navigation request failed with status ${response ? response.status : 'unknown'}`);
+    }
+
+    return response;
   } catch (error) {
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
