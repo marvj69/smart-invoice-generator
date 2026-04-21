@@ -997,19 +997,50 @@
             return 'Service Work';
         }
 
+        function sanitizeFileName(baseName, extension = 'pdf') {
+            const reservedWindowsNames = new Set([
+                'con', 'prn', 'aux', 'nul',
+                'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+                'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'
+            ]);
+
+            let safeBase = String(baseName || '')
+                .replace(/[\x00-\x1f\x80-\x9f]+/g, ' ')
+                .replace(/[\\/:*?"<>|]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/[.\s]+$/g, '');
+
+            if (!safeBase) {
+                safeBase = 'Invoice';
+            }
+
+            if (reservedWindowsNames.has(safeBase.toLowerCase())) {
+                safeBase = `Invoice ${safeBase}`;
+            }
+
+            let safeExtension = String(extension || 'pdf')
+                .replace(/[^\w]+/g, '')
+                .toLowerCase();
+            if (!safeExtension) safeExtension = 'pdf';
+
+            return `${safeBase}.${safeExtension}`;
+        }
+
         function buildPdfFileName(data) {
-            const descriptorRaw = normalizeFilenamePart(getDescriptorForFilename(data), 36) || 'Service Work';
+            const sourceData = data && typeof data === 'object' ? data : {};
+            const descriptorRaw = normalizeFilenamePart(getDescriptorForFilename(sourceData), 36) || 'Service Work';
             const descriptorWords = descriptorRaw.split(/\s+/).filter(Boolean);
             const descriptor = descriptorWords.length >= 2
                 ? `${descriptorWords[0]} ${descriptorWords[1]}`
                 : `${descriptorWords[0] || 'Service'} Work`;
 
-            const city = normalizeFilenamePart(getCityForFilename(data), 28) || 'Unknown City';
-            const datePart = formatFilenameDate(data.invoiceDate || new Date().toISOString().split('T')[0]);
+            const city = normalizeFilenamePart(getCityForFilename(sourceData), 28) || 'Unknown City';
+            const datePart = formatFilenameDate(sourceData.invoiceDate || new Date().toISOString().split('T')[0]);
             const safeDate = datePart || formatFilenameDate(new Date().toISOString()) || String(Date.now());
             let baseName = `${descriptor} - ${city} - ${safeDate}`.replace(/\s{2,}/g, ' ').trim();
 
-            return `${baseName}.pdf`;
+            return sanitizeFileName(baseName, 'pdf');
         }
 
         function encodeBase64Url(value) {
