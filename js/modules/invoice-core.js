@@ -1197,8 +1197,12 @@
             showToast('Generating PDF...', 'info');
 
             const exportNode = element.cloneNode(true);
+            exportNode.style.transform = 'none';
+            exportNode.style.transformOrigin = 'top left';
+            exportNode.style.width = `${PAPER_WIDTH_MM}mm`;
             exportNode.style.minHeight = 'auto';
             exportNode.style.height = 'auto';
+            exportNode.style.aspectRatio = 'auto';
             exportNode.style.boxShadow = 'none';
             exportNode.style.margin = '0';
 
