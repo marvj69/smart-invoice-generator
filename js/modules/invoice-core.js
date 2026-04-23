@@ -704,10 +704,10 @@
                 if (item.description || item.quantity || item.rate) {
                     const amount = item.quantity * item.rate;
                     const row = document.createElement('tr');
-                    row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                    row.className = `invoice-line-item ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`;
                     const descriptionHtml = formatDescriptionText(item.description);
                     row.innerHTML = `
-                        <td class="py-3 pr-4 text-gray-900">${descriptionHtml}</td>
+                        <td class="py-3 pr-4 text-gray-900"><div class="invoice-item-description">${descriptionHtml}</div></td>
                         <td class="py-3 px-4 text-right text-gray-600">${item.quantity}</td>
                         <td class="py-3 px-4 text-right text-gray-600">$${formatMoney(item.rate)}</td>
                         <td class="py-3 pl-4 text-right font-medium">$${formatMoney(amount)}</td>
@@ -1205,6 +1205,7 @@
             exportNode.style.aspectRatio = 'auto';
             exportNode.style.boxShadow = 'none';
             exportNode.style.margin = '0';
+            exportNode.style.overflow = 'visible';
 
             const wrapper = document.createElement('div');
             wrapper.style.position = 'fixed';
@@ -1235,7 +1236,10 @@
                         backgroundColor: '#ffffff'
                     },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak: { mode: ['css', 'legacy'] }
+                    pagebreak: {
+                        mode: ['css', 'legacy', 'avoid-all'],
+                        avoid: ['tr', '.invoice-line-item', '#previewNotesSection']
+                    }
                 }).from(exportNode).toPdf();
 
                 worker.get('pdf').then(pdf => {
