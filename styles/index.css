@@ -65,6 +65,30 @@ video {
             box-sizing: border-box;
         }
 
+        #invoice-preview table {
+            table-layout: fixed;
+        }
+
+        #invoice-preview th,
+        #invoice-preview td {
+            vertical-align: top;
+            line-height: 1.45;
+        }
+
+        #invoice-preview td {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        #invoice-preview .invoice-item-description {
+            white-space: pre-line;
+        }
+
+        #invoice-preview .invoice-line-item {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
         @media screen and (max-width: 1024px) {
             .a4-paper {
                 width: 100%;
