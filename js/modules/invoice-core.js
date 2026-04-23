@@ -1207,6 +1207,24 @@
             exportNode.style.margin = '0';
             exportNode.style.overflow = 'visible';
 
+            // Normalize layout for export so long invoices can flow across pages cleanly.
+            const exportContentColumn = exportNode.querySelector('.h-full.flex.flex-col');
+            if (exportContentColumn) {
+                exportContentColumn.style.height = 'auto';
+                exportContentColumn.style.minHeight = '0';
+                exportContentColumn.style.display = 'block';
+            }
+
+            const exportItemsSection = exportNode.querySelector('.flex-1.mb-12');
+            if (exportItemsSection) {
+                exportItemsSection.style.flex = '0 0 auto';
+            }
+
+            const exportNotesSection = exportNode.querySelector('#previewNotesSection');
+            if (exportNotesSection) {
+                exportNotesSection.style.marginTop = '0';
+            }
+
             const wrapper = document.createElement('div');
             wrapper.style.position = 'fixed';
             wrapper.style.left = '-10000px';
@@ -1237,8 +1255,8 @@
                     },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: {
-                        mode: ['css', 'legacy', 'avoid-all'],
-                        avoid: ['tr', '.invoice-line-item', '#previewNotesSection']
+                        mode: ['css', 'legacy'],
+                        avoid: ['thead', 'tr', '.invoice-line-item', '#previewNotesSection']
                     }
                 }).from(exportNode).toPdf();
 
