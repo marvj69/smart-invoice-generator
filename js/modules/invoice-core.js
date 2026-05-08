@@ -353,9 +353,11 @@
         let mobilePreviewOpen = false;
         let draggedLineItem = null;
         let pointerDragState = null;
+        let addressTemplateAutoSaveTimer = null;
         const LINE_ITEM_DRAG_START_THRESHOLD = 5;
         const LINE_ITEM_DRAG_SCROLL_ZONE = 88;
         const LINE_ITEM_DRAG_MAX_SCROLL_STEP = 16;
+        const ADDRESS_TEMPLATE_AUTO_SAVE_DELAY_MS = 1000;
 
         function scheduleUpdate() {
             if (updateScheduled) return;
@@ -1134,7 +1136,7 @@
                     <label class="block text-xs font-medium text-gray-600 mb-1">Property Address</label>
                     <input type="text" placeholder="e.g., 885 County Rd CKL, Champion, MI 49814"
                         class="item-address w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500"
-                        oninput="scheduleUpdate()">
+                        oninput="scheduleUpdate(); scheduleAddressTemplateAutoSave(this)" onchange="handleLineItemAddressSubmitted(this)">
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-600 mb-1">Work Done</label>
@@ -1669,6 +1671,102 @@
         }
 
         // Template Management
+        function persistSavedTemplates() {
+            localStorage.setItem('invoiceTemplates', JSON.stringify(savedTemplates));
+            const modal = document.getElementById('templateModal');
+            if (modal && !modal.classList.contains('hidden')) {
+                renderTemplatesList();
+            }
+            if (typeof scheduleCloudSave === 'function') {
+                scheduleCloudSave();
+            }
+        }
+
+        function createTemplateSnapshot(name, existingTemplate = null) {
+            const existingId = Number(existingTemplate && existingTemplate.id);
+            return {
+                id: Number.isFinite(existingId) && existingId > 0 ? existingId : Date.now(),
+                name: name,
+                date: new Date().toLocaleDateString(),
+                data: JSON.parse(JSON.stringify(invoiceData))
+            };
+        }
+
+        function findTemplateIndexById(id) {
+            const numericId = Number(id);
+            if (!Number.isFinite(numericId) || numericId <= 0) return -1;
+            return savedTemplates.findIndex(template => Number(template && template.id) === numericId);
+        }
+
+        function upsertTemplate(name, options = {}) {
+            const normalizedName = normalizeSpace(name);
+            if (!normalizedName) return null;
+
+            const idIndex = findTemplateIndexById(options.templateId);
+            const nameIndex = savedTemplates.findIndex(template => normalizeSpace(template && template.name) === normalizedName);
+            let existingIndex = idIndex >= 0 ? idIndex : nameIndex;
+
+            if (idIndex >= 0 && nameIndex >= 0 && idIndex !== nameIndex) {
+                savedTemplates.splice(idIndex, 1);
+                existingIndex = nameIndex > idIndex ? nameIndex - 1 : nameIndex;
+            }
+
+            const existingTemplate = existingIndex >= 0 ? savedTemplates[existingIndex] : null;
+            const template = createTemplateSnapshot(normalizedName, existingTemplate);
+
+            if (existingIndex >= 0) {
+                if (options.confirmOverwrite && !confirm('A template with this name exists. Overwrite?')) {
+                    return null;
+                }
+                savedTemplates[existingIndex] = template;
+            } else {
+                savedTemplates.push(template);
+            }
+
+            persistSavedTemplates();
+            if (options.message) {
+                showToast(options.message);
+            }
+            return template;
+        }
+
+        function commitAddressTemplate(input, options = {}) {
+            const address = normalizeSpace(input && input.value);
+            if (!address) return null;
+
+            const previousAddress = input && input.dataset ? normalizeSpace(input.dataset.autosavedTemplateName) : '';
+            if (previousAddress === address) return null;
+
+            updateInvoice();
+            const template = upsertTemplate(address, {
+                templateId: input && input.dataset ? input.dataset.autosavedTemplateId : '',
+                message: options.message
+            });
+
+            if (template && input && input.dataset) {
+                input.dataset.autosavedTemplateId = String(template.id);
+                input.dataset.autosavedTemplateName = template.name;
+            }
+
+            return template;
+        }
+
+        function scheduleAddressTemplateAutoSave(input) {
+            if (addressTemplateAutoSaveTimer) clearTimeout(addressTemplateAutoSaveTimer);
+            addressTemplateAutoSaveTimer = setTimeout(() => {
+                addressTemplateAutoSaveTimer = null;
+                commitAddressTemplate(input, { message: 'Template saved from address' });
+            }, ADDRESS_TEMPLATE_AUTO_SAVE_DELAY_MS);
+        }
+
+        function handleLineItemAddressSubmitted(input) {
+            if (addressTemplateAutoSaveTimer) {
+                clearTimeout(addressTemplateAutoSaveTimer);
+                addressTemplateAutoSaveTimer = null;
+            }
+            commitAddressTemplate(input, { message: 'Template saved from address' });
+        }
+
         function saveTemplate() {
             const name = document.getElementById('templateName').value.trim();
             if (!name) {
@@ -1676,27 +1774,8 @@
                 return;
             }
 
-            const template = {
-                id: Date.now(),
-                name: name,
-                date: new Date().toLocaleDateString(),
-                data: JSON.parse(JSON.stringify(invoiceData))
-            };
-
-            // Check for duplicates
-            const existingIndex = savedTemplates.findIndex(t => t.name === name);
-            if (existingIndex >= 0) {
-                if (!confirm('A template with this name exists. Overwrite?')) return;
-                savedTemplates[existingIndex] = template;
-            } else {
-                savedTemplates.push(template);
-            }
-
-            localStorage.setItem('invoiceTemplates', JSON.stringify(savedTemplates));
-            document.getElementById('templateName').value = '';
-            showToast('Template saved successfully');
-            if (typeof scheduleCloudSave === 'function') {
-                scheduleCloudSave();
+            if (upsertTemplate(name, { confirmOverwrite: true, message: 'Template saved successfully' })) {
+                document.getElementById('templateName').value = '';
             }
         }
 
@@ -1713,12 +1792,8 @@
             event.stopPropagation();
             if (confirm('Are you sure you want to delete this template?')) {
                 savedTemplates = savedTemplates.filter(t => t.id !== id);
-                localStorage.setItem('invoiceTemplates', JSON.stringify(savedTemplates));
-                renderTemplatesList();
+                persistSavedTemplates();
                 showToast('Template deleted');
-                if (typeof scheduleCloudSave === 'function') {
-                    scheduleCloudSave();
-                }
             }
         }
 
