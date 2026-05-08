@@ -347,6 +347,9 @@
         let mobilePreviewOpen = false;
         let draggedLineItem = null;
         let pointerDragState = null;
+        const LINE_ITEM_DRAG_START_THRESHOLD = 5;
+        const LINE_ITEM_DRAG_SCROLL_ZONE = 88;
+        const LINE_ITEM_DRAG_MAX_SCROLL_STEP = 16;
 
         function scheduleUpdate() {
             if (updateScheduled) return;
@@ -770,6 +773,8 @@
             items.forEach((item, index) => {
                 const badge = item.querySelector('.line-item-badge');
                 if (badge) badge.textContent = `Item ${index + 1}`;
+                const handle = item.querySelector('.line-item-drag-handle');
+                if (handle) handle.setAttribute('aria-label', `Reorder item ${index + 1}`);
                 item.dataset.itemIndex = String(index);
             });
         }
@@ -789,89 +794,307 @@
             }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
         }
 
-        function moveDraggedLineItem(clientY) {
-            const container = document.getElementById('lineItemsContainer');
-            if (!container || !draggedLineItem) return;
+        function getLineItemScrollParent(element) {
+            let node = element ? element.parentElement : null;
+            while (node && node !== document.body) {
+                const style = window.getComputedStyle(node);
+                if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+                    return node;
+                }
+                node = node.parentElement;
+            }
 
-            const afterElement = getLineItemAfterDragPosition(container, clientY);
+            return document.scrollingElement || document.documentElement;
+        }
+
+        function resetDraggedLineItemStyles(item) {
+            if (!item) return;
+
+            item.classList.remove('dragging');
+            item.removeAttribute('aria-grabbed');
+            item.style.removeProperty('height');
+            item.style.removeProperty('left');
+            item.style.removeProperty('margin');
+            item.style.removeProperty('pointer-events');
+            item.style.removeProperty('position');
+            item.style.removeProperty('top');
+            item.style.removeProperty('transform');
+            item.style.removeProperty('width');
+            item.style.removeProperty('z-index');
+        }
+
+        function positionDraggedLineItem() {
+            if (!pointerDragState || !pointerDragState.isDragging) return;
+
+            const x = pointerDragState.latestX - pointerDragState.offsetX;
+            const y = pointerDragState.latestY - pointerDragState.offsetY;
+            pointerDragState.item.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) scale(1.01)`;
+        }
+
+        function moveLineItemPlaceholder() {
+            if (!pointerDragState || !pointerDragState.isDragging) return;
+
+            const dragCenterY = pointerDragState.latestY - pointerDragState.offsetY + pointerDragState.itemRect.height / 2;
+            const afterElement = getLineItemAfterDragPosition(pointerDragState.container, dragCenterY);
+
             if (!afterElement) {
-                container.appendChild(draggedLineItem);
-            } else {
-                container.insertBefore(draggedLineItem, afterElement);
+                pointerDragState.container.appendChild(pointerDragState.placeholder);
+            } else if (afterElement !== pointerDragState.placeholder.nextElementSibling) {
+                pointerDragState.container.insertBefore(pointerDragState.placeholder, afterElement);
             }
         }
 
-        function finishLineItemDrag() {
-            if (!draggedLineItem) return;
+        function updateLineItemAutoScroll() {
+            if (!pointerDragState || !pointerDragState.isDragging) return;
 
-            draggedLineItem.classList.remove('dragging');
+            const scroller = pointerDragState.scrollParent;
+            const viewportRect = scroller === document.scrollingElement || scroller === document.documentElement
+                ? { top: 0, bottom: window.innerHeight }
+                : scroller.getBoundingClientRect();
+
+            let scrollStep = 0;
+            const distanceFromTop = pointerDragState.latestY - viewportRect.top;
+            const distanceFromBottom = viewportRect.bottom - pointerDragState.latestY;
+
+            if (distanceFromTop < LINE_ITEM_DRAG_SCROLL_ZONE) {
+                scrollStep = -Math.ceil((1 - Math.max(distanceFromTop, 0) / LINE_ITEM_DRAG_SCROLL_ZONE) * LINE_ITEM_DRAG_MAX_SCROLL_STEP);
+            } else if (distanceFromBottom < LINE_ITEM_DRAG_SCROLL_ZONE) {
+                scrollStep = Math.ceil((1 - Math.max(distanceFromBottom, 0) / LINE_ITEM_DRAG_SCROLL_ZONE) * LINE_ITEM_DRAG_MAX_SCROLL_STEP);
+            }
+
+            if (scrollStep) {
+                scroller.scrollTop += scrollStep;
+                moveLineItemPlaceholder();
+                pointerDragState.autoScrollFrame = requestAnimationFrame(updateLineItemAutoScroll);
+            } else {
+                pointerDragState.autoScrollFrame = null;
+            }
+        }
+
+        function scheduleLineItemAutoScroll() {
+            if (!pointerDragState || !pointerDragState.isDragging || pointerDragState.autoScrollFrame) return;
+            pointerDragState.autoScrollFrame = requestAnimationFrame(updateLineItemAutoScroll);
+        }
+
+        function removeLineItemMouseListeners() {
+            document.removeEventListener('mousemove', handleLineItemMouseMove);
+            document.removeEventListener('mouseup', handleLineItemMouseUp);
+        }
+
+        function beginLineItemDrag(event) {
+            if (!pointerDragState || pointerDragState.isDragging) return;
+
+            const item = pointerDragState.item;
+            const rect = item.getBoundingClientRect();
+            const placeholder = document.createElement('div');
+            placeholder.className = 'line-item-placeholder';
+            placeholder.style.height = `${rect.height}px`;
+            placeholder.setAttribute('aria-hidden', 'true');
+
+            item.parentNode.insertBefore(placeholder, item);
+
+            pointerDragState.placeholder = placeholder;
+            pointerDragState.itemRect = rect;
+            pointerDragState.offsetX = event.clientX - rect.left;
+            pointerDragState.offsetY = event.clientY - rect.top;
+            pointerDragState.latestX = event.clientX;
+            pointerDragState.latestY = event.clientY;
+            pointerDragState.isDragging = true;
+            pointerDragState.scrollParent = getLineItemScrollParent(item);
+
+            draggedLineItem = item;
+            item.classList.add('dragging');
+            item.setAttribute('aria-grabbed', 'true');
+            item.style.position = 'fixed';
+            item.style.top = '0';
+            item.style.left = '0';
+            item.style.width = `${rect.width}px`;
+            item.style.height = `${rect.height}px`;
+            item.style.margin = '0';
+            item.style.pointerEvents = 'none';
+            item.style.zIndex = '70';
+
+            pointerDragState.container.classList.add('line-items-reordering');
+            document.body.classList.add('line-item-drag-active');
+            positionDraggedLineItem();
+            moveLineItemPlaceholder();
+        }
+
+        function finishLineItemDrag() {
+            if (!pointerDragState && !draggedLineItem) return;
+
+            const state = pointerDragState;
+            const item = state ? state.item : draggedLineItem;
+            removeLineItemMouseListeners();
+
+            if (state && state.autoScrollFrame) {
+                cancelAnimationFrame(state.autoScrollFrame);
+            }
+
+            if (state && state.isDragging && state.placeholder) {
+                state.placeholder.replaceWith(item);
+            } else if (state && state.placeholder) {
+                state.placeholder.remove();
+            }
+
+            resetDraggedLineItemStyles(item);
+            if (state && state.container) {
+                state.container.classList.remove('line-items-reordering');
+            }
+
             draggedLineItem = null;
+            pointerDragState = null;
             document.body.classList.remove('line-item-drag-active');
             renumberLineItems();
             updateInvoice();
         }
 
-        function handleLineItemDragStart(event) {
-            const item = event.target.closest('.line-item');
-            if (!item) return;
+        function cancelLineItemDrag() {
+            if (!pointerDragState) return;
 
-            draggedLineItem = item;
-            item.classList.add('dragging');
-            if (event.dataTransfer) {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', item.dataset.itemIndex || '');
+            const state = pointerDragState;
+            removeLineItemMouseListeners();
+            if (state.autoScrollFrame) {
+                cancelAnimationFrame(state.autoScrollFrame);
             }
+            if (state.placeholder) {
+                state.placeholder.remove();
+            }
+
+            resetDraggedLineItemStyles(state.item);
+            state.container.classList.remove('line-items-reordering');
+            draggedLineItem = null;
+            pointerDragState = null;
+            document.body.classList.remove('line-item-drag-active');
+        }
+
+        function handleLineItemDragStart(event) {
+            event.preventDefault();
         }
 
         function handleLineItemDragOver(event) {
-            if (!draggedLineItem) return;
             event.preventDefault();
-            moveDraggedLineItem(event.clientY);
+        }
+
+        function startLineItemDragTracking(event, pointerId, shouldCapture = true) {
+            const item = event.target.closest('.line-item');
+            const container = document.getElementById('lineItemsContainer');
+            if (!item || !container) return;
+
+            pointerDragState = {
+                pointerId,
+                handle: event.currentTarget,
+                item,
+                container,
+                startX: event.clientX,
+                startY: event.clientY,
+                latestX: event.clientX,
+                latestY: event.clientY,
+                isDragging: false,
+                placeholder: null,
+                autoScrollFrame: null
+            };
+
+            if (shouldCapture && event.currentTarget.setPointerCapture) {
+                event.currentTarget.setPointerCapture(pointerId);
+            }
+            event.preventDefault();
         }
 
         function handleLineItemPointerDown(event) {
-            if (event.pointerType === 'mouse' || event.button !== 0) return;
+            if (event.button !== undefined && event.button !== 0) return;
+            startLineItemDragTracking(event, event.pointerId);
+        }
 
-            const item = event.target.closest('.line-item');
-            if (!item) return;
+        function moveTrackedLineItem(clientX, clientY, sourceEvent) {
+            if (!pointerDragState) return;
 
-            pointerDragState = {
-                pointerId: event.pointerId,
-                handle: event.currentTarget
-            };
-            draggedLineItem = item;
-            item.classList.add('dragging');
-            document.body.classList.add('line-item-drag-active');
-            event.currentTarget.setPointerCapture(event.pointerId);
-            event.preventDefault();
+            pointerDragState.latestX = clientX;
+            pointerDragState.latestY = clientY;
+
+            if (!pointerDragState.isDragging) {
+                const deltaX = clientX - pointerDragState.startX;
+                const deltaY = clientY - pointerDragState.startY;
+                if (Math.hypot(deltaX, deltaY) < LINE_ITEM_DRAG_START_THRESHOLD) return;
+                beginLineItemDrag({
+                    clientX,
+                    clientY
+                });
+            }
+
+            sourceEvent.preventDefault();
+            positionDraggedLineItem();
+            moveLineItemPlaceholder();
+            scheduleLineItemAutoScroll();
         }
 
         function handleLineItemPointerMove(event) {
-            if (!pointerDragState || pointerDragState.pointerId !== event.pointerId || !draggedLineItem) return;
-            event.preventDefault();
-            moveDraggedLineItem(event.clientY);
+            if (!pointerDragState || pointerDragState.pointerId !== event.pointerId) return;
+            moveTrackedLineItem(event.clientX, event.clientY, event);
         }
 
         function handleLineItemPointerUp(event) {
             if (!pointerDragState || pointerDragState.pointerId !== event.pointerId) return;
 
-            if (pointerDragState.handle && pointerDragState.handle.hasPointerCapture(event.pointerId)) {
+            if (pointerDragState.handle && pointerDragState.handle.hasPointerCapture && pointerDragState.handle.hasPointerCapture(event.pointerId)) {
                 pointerDragState.handle.releasePointerCapture(event.pointerId);
             }
-            pointerDragState = null;
             finishLineItemDrag();
+        }
+
+        function handleLineItemMouseDown(event) {
+            if (pointerDragState || event.button !== 0) return;
+
+            startLineItemDragTracking(event, 'mouse', false);
+            document.addEventListener('mousemove', handleLineItemMouseMove);
+            document.addEventListener('mouseup', handleLineItemMouseUp);
+        }
+
+        function handleLineItemMouseMove(event) {
+            if (!pointerDragState || pointerDragState.pointerId !== 'mouse') return;
+            moveTrackedLineItem(event.clientX, event.clientY, event);
+        }
+
+        function handleLineItemMouseUp() {
+            if (!pointerDragState || pointerDragState.pointerId !== 'mouse') return;
+            finishLineItemDrag();
+        }
+
+        function handleLineItemDragKeydown(event) {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+
+            const item = event.target.closest('.line-item');
+            const container = document.getElementById('lineItemsContainer');
+            if (!item || !container) return;
+
+            const sibling = event.key === 'ArrowUp' ? item.previousElementSibling : item.nextElementSibling;
+            if (!sibling || !sibling.classList.contains('line-item')) return;
+
+            event.preventDefault();
+            if (event.key === 'ArrowUp') {
+                container.insertBefore(item, sibling);
+            } else {
+                container.insertBefore(sibling, item);
+            }
+
+            item.classList.remove('line-item-keyboard-moved');
+            requestAnimationFrame(() => item.classList.add('line-item-keyboard-moved'));
+            renumberLineItems();
+            updateInvoice();
+            event.currentTarget.focus({ preventScroll: true });
+        }
+
+        function handleLineItemDragEscape(event) {
+            if (event.key !== 'Escape' || !pointerDragState || !pointerDragState.isDragging) return;
+            event.preventDefault();
+            cancelLineItemDrag();
         }
 
         function setupLineItemReordering() {
             const container = document.getElementById('lineItemsContainer');
             if (!container) return;
 
-            container.addEventListener('dragover', handleLineItemDragOver);
-            container.addEventListener('drop', (event) => {
-                if (!draggedLineItem) return;
-                event.preventDefault();
-                finishLineItemDrag();
-            });
+            document.addEventListener('keydown', handleLineItemDragEscape);
         }
 
         function addLineItem(itemData = null, shouldRefresh = true) {
@@ -884,10 +1107,12 @@
             div.innerHTML = `
                 <div class="line-item-header">
                     <div class="line-item-title">
-                        <button type="button" class="line-item-drag-handle" draggable="true"
-                            ondragstart="handleLineItemDragStart(event)" ondragend="finishLineItemDrag()"
+                        <button type="button" class="line-item-drag-handle"
+                            ondragstart="handleLineItemDragStart(event)"
                             onpointerdown="handleLineItemPointerDown(event)" onpointermove="handleLineItemPointerMove(event)" onpointerup="handleLineItemPointerUp(event)" onpointercancel="handleLineItemPointerUp(event)"
-                            title="Drag to reorder item" aria-label="Drag to reorder item">
+                            onmousedown="handleLineItemMouseDown(event)"
+                            onkeydown="handleLineItemDragKeydown(event)"
+                            title="Drag or use arrow keys to reorder item" aria-label="Reorder item ${itemNumber}">
                             <i class="fas fa-grip-vertical" aria-hidden="true"></i>
                         </button>
                         <span class="line-item-badge">Item ${itemNumber}</span>
