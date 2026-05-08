@@ -345,6 +345,8 @@
         let savedTemplates = migrateV1TemplatesIfNeeded();
         let updateScheduled = false;
         let mobilePreviewOpen = false;
+        let draggedLineItem = null;
+        let pointerDragState = null;
 
         function scheduleUpdate() {
             if (updateScheduled) return;
@@ -631,6 +633,7 @@
             loadGeminiSettings();
             loadDefaultCompanySettings();
             applyInvoiceDataToForm(invoiceData);
+            setupLineItemReordering();
         });
 
         // Update Preview
@@ -767,6 +770,107 @@
             items.forEach((item, index) => {
                 const badge = item.querySelector('.line-item-badge');
                 if (badge) badge.textContent = `Item ${index + 1}`;
+                item.dataset.itemIndex = String(index);
+            });
+        }
+
+        function getLineItemAfterDragPosition(container, y) {
+            const draggableItems = [...container.querySelectorAll('.line-item:not(.dragging)')];
+
+            return draggableItems.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset, element: child };
+                }
+
+                return closest;
+            }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+        }
+
+        function moveDraggedLineItem(clientY) {
+            const container = document.getElementById('lineItemsContainer');
+            if (!container || !draggedLineItem) return;
+
+            const afterElement = getLineItemAfterDragPosition(container, clientY);
+            if (!afterElement) {
+                container.appendChild(draggedLineItem);
+            } else {
+                container.insertBefore(draggedLineItem, afterElement);
+            }
+        }
+
+        function finishLineItemDrag() {
+            if (!draggedLineItem) return;
+
+            draggedLineItem.classList.remove('dragging');
+            draggedLineItem = null;
+            document.body.classList.remove('line-item-drag-active');
+            renumberLineItems();
+            updateInvoice();
+        }
+
+        function handleLineItemDragStart(event) {
+            const item = event.target.closest('.line-item');
+            if (!item) return;
+
+            draggedLineItem = item;
+            item.classList.add('dragging');
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', item.dataset.itemIndex || '');
+            }
+        }
+
+        function handleLineItemDragOver(event) {
+            if (!draggedLineItem) return;
+            event.preventDefault();
+            moveDraggedLineItem(event.clientY);
+        }
+
+        function handleLineItemPointerDown(event) {
+            if (event.pointerType === 'mouse' || event.button !== 0) return;
+
+            const item = event.target.closest('.line-item');
+            if (!item) return;
+
+            pointerDragState = {
+                pointerId: event.pointerId,
+                handle: event.currentTarget
+            };
+            draggedLineItem = item;
+            item.classList.add('dragging');
+            document.body.classList.add('line-item-drag-active');
+            event.currentTarget.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        }
+
+        function handleLineItemPointerMove(event) {
+            if (!pointerDragState || pointerDragState.pointerId !== event.pointerId || !draggedLineItem) return;
+            event.preventDefault();
+            moveDraggedLineItem(event.clientY);
+        }
+
+        function handleLineItemPointerUp(event) {
+            if (!pointerDragState || pointerDragState.pointerId !== event.pointerId) return;
+
+            if (pointerDragState.handle && pointerDragState.handle.hasPointerCapture(event.pointerId)) {
+                pointerDragState.handle.releasePointerCapture(event.pointerId);
+            }
+            pointerDragState = null;
+            finishLineItemDrag();
+        }
+
+        function setupLineItemReordering() {
+            const container = document.getElementById('lineItemsContainer');
+            if (!container) return;
+
+            container.addEventListener('dragover', handleLineItemDragOver);
+            container.addEventListener('drop', (event) => {
+                if (!draggedLineItem) return;
+                event.preventDefault();
+                finishLineItemDrag();
             });
         }
 
@@ -779,8 +883,16 @@
             div.className = 'line-item bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2';
             div.innerHTML = `
                 <div class="line-item-header">
-                    <span class="line-item-badge">Item ${itemNumber}</span>
-                    <button onclick="removeLineItem(this)" class="px-2 text-red-500 hover:text-red-700" title="Remove item">
+                    <div class="line-item-title">
+                        <button type="button" class="line-item-drag-handle" draggable="true"
+                            ondragstart="handleLineItemDragStart(event)" ondragend="finishLineItemDrag()"
+                            onpointerdown="handleLineItemPointerDown(event)" onpointermove="handleLineItemPointerMove(event)" onpointerup="handleLineItemPointerUp(event)" onpointercancel="handleLineItemPointerUp(event)"
+                            title="Drag to reorder item" aria-label="Drag to reorder item">
+                            <i class="fas fa-grip-vertical" aria-hidden="true"></i>
+                        </button>
+                        <span class="line-item-badge">Item ${itemNumber}</span>
+                    </div>
+                    <button type="button" onclick="removeLineItem(this)" class="px-2 text-red-500 hover:text-red-700" title="Remove item">
                         <i class="fas fa-trash-alt text-xs"></i>
                     </button>
                 </div>
@@ -818,6 +930,7 @@
             div.querySelector('.item-rate').value = normalizedItem.rate;
 
             container.appendChild(div);
+            renumberLineItems();
             if (shouldRefresh) {
                 updateInvoice();
             }

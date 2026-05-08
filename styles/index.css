@@ -690,11 +690,58 @@ video {
 /* ========================================
    LINE ITEMS MOBILE OPTIMIZATION
    ======================================== */
+.line-item {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.line-item.dragging {
+    border-color: #818cf8;
+    box-shadow: 0 10px 24px rgba(99, 102, 241, 0.18);
+    opacity: 0.78;
+}
+
+body.line-item-drag-active {
+    cursor: grabbing;
+    user-select: none;
+}
+
 .line-item-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 0.5rem;
+}
+
+.line-item-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.line-item-drag-handle {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #c7d2fe;
+    border-radius: 0.45rem;
+    background: #eef2ff;
+    color: #4f46e5;
+    cursor: grab;
+    touch-action: none;
+}
+
+.line-item-drag-handle:hover,
+.line-item-drag-handle:focus-visible {
+    background: #e0e7ff;
+    color: #4338ca;
+    outline: none;
+}
+
+.line-item-drag-handle:active {
+    cursor: grabbing;
 }
 
 .line-item-badge {
