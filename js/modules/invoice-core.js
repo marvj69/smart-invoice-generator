@@ -354,10 +354,13 @@
         let draggedLineItem = null;
         let pointerDragState = null;
         let addressTemplateAutoSaveTimer = null;
+        let activeTemplateAutoSaveTimer = null;
+        let activeTemplateId = null;
         const LINE_ITEM_DRAG_START_THRESHOLD = 5;
         const LINE_ITEM_DRAG_SCROLL_ZONE = 88;
         const LINE_ITEM_DRAG_MAX_SCROLL_STEP = 16;
         const ADDRESS_TEMPLATE_AUTO_SAVE_DELAY_MS = 1000;
+        const ACTIVE_TEMPLATE_AUTO_SAVE_DELAY_MS = 700;
 
         function scheduleUpdate() {
             if (updateScheduled) return;
@@ -693,6 +696,7 @@
             if (typeof scheduleCloudSave === 'function') {
                 scheduleCloudSave();
             }
+            scheduleActiveTemplateAutoSave();
         }
 
         function renderPreview() {
@@ -1199,7 +1203,9 @@
         function clearInvoice() {
             if (!confirm('Clear this invoice and start over?')) return;
 
+            clearActiveTemplate();
             applyInvoiceDataToForm(getDefaultInvoiceData());
+            clearAddressTemplateAutoSaveMarkers();
 
             const logoInput = document.getElementById('logoInput');
             const importInput = document.getElementById('invoiceImportInput');
@@ -1692,6 +1698,78 @@
             };
         }
 
+        function activateTemplate(template) {
+            const id = Number(template && template.id);
+            activeTemplateId = Number.isFinite(id) && id > 0 ? id : null;
+        }
+
+        function clearActiveTemplate() {
+            activeTemplateId = null;
+            if (activeTemplateAutoSaveTimer) {
+                clearTimeout(activeTemplateAutoSaveTimer);
+                activeTemplateAutoSaveTimer = null;
+            }
+            if (addressTemplateAutoSaveTimer) {
+                clearTimeout(addressTemplateAutoSaveTimer);
+                addressTemplateAutoSaveTimer = null;
+            }
+        }
+
+        function clearAddressTemplateAutoSaveMarkers() {
+            document.querySelectorAll('.item-address').forEach(input => {
+                if (!input || !input.dataset) return;
+                delete input.dataset.autosavedTemplateId;
+                delete input.dataset.autosavedTemplateName;
+            });
+        }
+
+        function cloneInvoiceDataSnapshot() {
+            return JSON.parse(JSON.stringify(invoiceData));
+        }
+
+        function stringifyTemplateData(data) {
+            try {
+                return JSON.stringify(data || {});
+            } catch (_error) {
+                return '';
+            }
+        }
+
+        function saveActiveTemplateSnapshot(options = {}) {
+            const activeIndex = findTemplateIndexById(activeTemplateId);
+            if (activeIndex < 0) {
+                activeTemplateId = null;
+                return null;
+            }
+
+            const existingTemplate = savedTemplates[activeIndex];
+            const data = cloneInvoiceDataSnapshot();
+            if (stringifyTemplateData(existingTemplate && existingTemplate.data) === stringifyTemplateData(data)) {
+                return existingTemplate;
+            }
+
+            const template = {
+                ...existingTemplate,
+                date: new Date().toLocaleDateString(),
+                data
+            };
+            savedTemplates[activeIndex] = template;
+            persistSavedTemplates();
+            if (options.message) {
+                showToast(options.message);
+            }
+            return template;
+        }
+
+        function scheduleActiveTemplateAutoSave() {
+            if (!activeTemplateId) return;
+            if (activeTemplateAutoSaveTimer) clearTimeout(activeTemplateAutoSaveTimer);
+            activeTemplateAutoSaveTimer = setTimeout(() => {
+                activeTemplateAutoSaveTimer = null;
+                saveActiveTemplateSnapshot();
+            }, ACTIVE_TEMPLATE_AUTO_SAVE_DELAY_MS);
+        }
+
         function findTemplateIndexById(id) {
             const numericId = Number(id);
             if (!Number.isFinite(numericId) || numericId <= 0) return -1;
@@ -1727,12 +1805,18 @@
             if (options.message) {
                 showToast(options.message);
             }
+            activateTemplate(template);
             return template;
         }
 
         function commitAddressTemplate(input, options = {}) {
             const address = normalizeSpace(input && input.value);
             if (!address) return null;
+
+            if (!(input && input.dataset && input.dataset.autosavedTemplateId) && activeTemplateId) {
+                updateInvoice();
+                return saveActiveTemplateSnapshot();
+            }
 
             const previousAddress = input && input.dataset ? normalizeSpace(input.dataset.autosavedTemplateName) : '';
             if (previousAddress === address) return null;
@@ -1748,6 +1832,39 @@
                 input.dataset.autosavedTemplateName = template.name;
             }
 
+            return template;
+        }
+
+        function getPrimaryTemplateAddress(data) {
+            if (!data || typeof data !== 'object' || !Array.isArray(data.items)) return '';
+
+            for (const item of data.items) {
+                if (!item || typeof item !== 'object') continue;
+
+                const address = normalizeSpace(item.address || '');
+                if (address) return address;
+
+                const parsed = parseDescriptionFields(item.description || '');
+                const parsedAddress = normalizeSpace(parsed.address || '');
+                if (parsedAddress) return parsedAddress;
+            }
+
+            return '';
+        }
+
+        function getImportedPdfTemplateName(file) {
+            const address = getPrimaryTemplateAddress(invoiceData);
+            if (address) return address;
+
+            const fileName = String(file && file.name ? file.name : '').trim();
+            const baseName = normalizeSpace(fileName.replace(/\.[^.]+$/, ''));
+            return baseName || 'Imported PDF';
+        }
+
+        function saveImportedPdfTemplate(file) {
+            updateInvoice();
+            const template = upsertTemplate(getImportedPdfTemplateName(file));
+            clearAddressTemplateAutoSaveMarkers();
             return template;
         }
 
@@ -1775,6 +1892,7 @@
             }
 
             if (upsertTemplate(name, { confirmOverwrite: true, message: 'Template saved successfully' })) {
+                clearAddressTemplateAutoSaveMarkers();
                 document.getElementById('templateName').value = '';
             }
         }
@@ -1783,7 +1901,10 @@
             const template = savedTemplates.find(t => t.id === id);
             if (!template) return;
 
+            clearActiveTemplate();
             applyInvoiceDataToForm(template.data);
+            activateTemplate(template);
+            clearAddressTemplateAutoSaveMarkers();
             closeTemplateManager();
             showToast('Template loaded');
         }
@@ -1792,6 +1913,9 @@
             event.stopPropagation();
             if (confirm('Are you sure you want to delete this template?')) {
                 savedTemplates = savedTemplates.filter(t => t.id !== id);
+                if (Number(activeTemplateId) === Number(id)) {
+                    clearActiveTemplate();
+                }
                 persistSavedTemplates();
                 showToast('Template deleted');
             }

@@ -454,7 +454,7 @@
 
             if ((!address || !work) && rawDescription) {
                 const parsed = parseDescriptionFields(rawDescription);
-                if (!address) address = normalizeAddressBlock(parsed.address || '', { includePhone: false });
+                if (!address && !work) address = normalizeAddressBlock(parsed.address || '', { includePhone: false });
                 if (!work) work = parsed.work;
             }
 
@@ -586,4 +586,3 @@
 
             return null;
         }
-

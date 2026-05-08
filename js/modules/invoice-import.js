@@ -813,9 +813,16 @@
             return parsedFromText;
         }
 
+        function isPdfUpload(file) {
+            const name = String(file && file.name ? file.name : '').trim().toLowerCase();
+            const type = String(file && file.type ? file.type : '').toLowerCase();
+            return name.endsWith('.pdf') || type.includes('pdf');
+        }
+
         async function handleInvoiceUpload(input) {
             const file = input && input.files ? input.files[0] : null;
             if (!file) return;
+            const shouldSavePdfTemplate = isPdfUpload(file);
             appendImportDebug('----- New import attempt -----');
             appendImportDebug('File chosen', {
                 name: file.name || '',
@@ -827,9 +834,16 @@
 
             try {
                 const parsedData = await parseUploadedInvoiceFile(file);
+                if (typeof clearActiveTemplate === 'function') {
+                    clearActiveTemplate();
+                }
                 applyInvoiceDataToForm(parsedData);
+                let savedPdfTemplate = null;
+                if (shouldSavePdfTemplate && typeof saveImportedPdfTemplate === 'function') {
+                    savedPdfTemplate = saveImportedPdfTemplate(file);
+                }
                 appendImportDebug('Import completed and form populated');
-                showToast(`Imported ${file.name}`);
+                showToast(savedPdfTemplate ? `Imported ${file.name} and saved template` : `Imported ${file.name}`);
             } catch (error) {
                 console.error('Import failed', error);
                 const fallbackMessage = 'Could not import this file. For PDF import, provide a Gemini API key.';
