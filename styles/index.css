@@ -201,6 +201,45 @@ video {
             font-size: 1.15rem;
         }
 
+        .account-status-button {
+            position: relative;
+        }
+
+        .account-status-dot {
+            position: absolute;
+            right: 0.55rem;
+            bottom: 0.55rem;
+            width: 0.58rem;
+            height: 0.58rem;
+            border-radius: 999px;
+            background: #9ca3af;
+            border: 2px solid #ffffff;
+        }
+
+        body.cloud-authenticated .account-status-dot {
+            background: #10b981;
+        }
+
+        #accountStatusButton[data-status="error"] .account-status-dot {
+            background: #ef4444;
+        }
+
+        #accountStatusButton[data-status="saving"] .account-status-dot {
+            background: #f59e0b;
+        }
+
+        #cloudSyncStatus[data-status="success"] {
+            color: #047857;
+        }
+
+        #cloudSyncStatus[data-status="saving"] {
+            color: #92400e;
+        }
+
+        #cloudSyncStatus[data-status="error"] {
+            color: #b91c1c;
+        }
+
         .header-action-download {
             color: #ffffff;
             border-color: rgba(99, 102, 241, 0.45);

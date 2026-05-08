@@ -1,5 +1,5 @@
-const APP_CACHE = "invoice-generator-v2-shell-v10";
-const RUNTIME_CACHE = "invoice-generator-v2-runtime-v7";
+const APP_CACHE = "invoice-generator-v2-shell-v11";
+const RUNTIME_CACHE = "invoice-generator-v2-runtime-v8";
 const CACHE_PREFIX = "invoice-generator-v2-";
 const OFFLINE_FALLBACK = "./index.html";
 
@@ -39,6 +39,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   if (event.request.method !== "GET") {
     return;
   }

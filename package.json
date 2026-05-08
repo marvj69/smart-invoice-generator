@@ -1,0 +1,18 @@
+{
+  "name": "smart-invoice-generator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "check": "node --check server/db.js && node --check server/http.js && node --check server/auth.js && node --check api/auth/signup.js && node --check api/auth/login.js && node --check api/auth/logout.js && node --check api/auth/me.js && node --check api/user-data.js",
+    "dev": "npx vercel dev",
+    "deploy": "npx vercel deploy --prod"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "bcryptjs": "^3.0.3"
+  }
+}

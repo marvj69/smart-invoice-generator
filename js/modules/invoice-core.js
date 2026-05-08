@@ -192,6 +192,9 @@
             if (showConfirmation) {
                 showToast('Default company saved');
             }
+            if (typeof scheduleCloudSave === 'function') {
+                scheduleCloudSave();
+            }
         }
 
         function clearDefaultCompanySettings() {
@@ -203,6 +206,9 @@
             if (nameInput) nameInput.value = '';
             if (detailsInput) detailsInput.value = '';
             showToast('Default company cleared', 'info');
+            if (typeof scheduleCloudSave === 'function') {
+                scheduleCloudSave();
+            }
         }
 
         let defaultCompanyProfile = loadDefaultCompanyProfileFromStorage();
@@ -682,6 +688,9 @@
             // Render Preview
             renderPreview();
             calculateTotals();
+            if (typeof scheduleCloudSave === 'function') {
+                scheduleCloudSave();
+            }
         }
 
         function renderPreview() {
@@ -1686,6 +1695,9 @@
             localStorage.setItem('invoiceTemplates', JSON.stringify(savedTemplates));
             document.getElementById('templateName').value = '';
             showToast('Template saved successfully');
+            if (typeof scheduleCloudSave === 'function') {
+                scheduleCloudSave();
+            }
         }
 
         function loadTemplate(id) {
@@ -1704,6 +1716,9 @@
                 localStorage.setItem('invoiceTemplates', JSON.stringify(savedTemplates));
                 renderTemplatesList();
                 showToast('Template deleted');
+                if (typeof scheduleCloudSave === 'function') {
+                    scheduleCloudSave();
+                }
             }
         }
 
@@ -1727,18 +1742,24 @@
             }
 
             empty.classList.add('hidden');
-            list.innerHTML = savedTemplates.map(template => `
-                <div onclick="loadTemplate(${template.id})" class="template-card bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-indigo-300 flex justify-between items-center group">
+            list.innerHTML = savedTemplates.map(template => {
+                const templateId = Number(template.id);
+                const safeId = Number.isFinite(templateId) ? templateId : 0;
+                const itemCount = Array.isArray(template.data && template.data.items) ? template.data.items.length : 0;
+                const companyName = template.data && template.data.companyName ? template.data.companyName : 'No company';
+                return `
+                <div onclick="loadTemplate(${safeId})" class="template-card bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-indigo-300 flex justify-between items-center group">
                     <div>
-                        <h3 class="font-semibold text-gray-900">${template.name}</h3>
-                        <p class="text-xs text-gray-500">Saved on ${template.date}</p>
-                        <p class="text-xs text-gray-400 mt-1">${template.data.items.length} items • ${template.data.companyName || 'No company'}</p>
+                        <h3 class="font-semibold text-gray-900">${escapeHtml(template.name)}</h3>
+                        <p class="text-xs text-gray-500">Saved on ${escapeHtml(template.date)}</p>
+                        <p class="text-xs text-gray-400 mt-1">${itemCount} items • ${escapeHtml(companyName)}</p>
                     </div>
-                    <button onclick="deleteTemplate(${template.id}, event)" class="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 rounded transition-all">
+                    <button onclick="deleteTemplate(${safeId}, event)" class="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 rounded transition-all">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         // Utilities
