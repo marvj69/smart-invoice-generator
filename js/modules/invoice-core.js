@@ -1266,18 +1266,69 @@
             return cleaned.replace(/[.\-_\s]+$/g, '');
         }
 
-        function extractCityFromText(text) {
-            const raw = String(text || '').replace(/\s+/g, ' ').trim();
-            if (!raw) return '';
+        function cleanCityCandidateForFilename(value) {
+            return normalizeSpace(value)
+                .replace(/^[,.\-_\s]+|[,.\-_\s]+$/g, '');
+        }
 
-            const commaFormat = raw.match(/,\s*([^,]+?)\s*,\s*[A-Z]{2}\b/);
-            if (commaFormat) {
-                return commaFormat[1].trim();
+        function stripStreetPrefixFromCityCandidate(value) {
+            let candidate = cleanCityCandidateForFilename(value);
+            if (!candidate) return '';
+
+            const commaParts = candidate.split(/\s*,\s*/).map(cleanCityCandidateForFilename).filter(Boolean);
+            if (commaParts.length > 1) {
+                candidate = commaParts[commaParts.length - 1];
             }
 
-            const stateZipFormat = raw.match(/(?:^|,\s*)([A-Za-z][A-Za-z .'-]*?)\s+[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/);
-            if (stateZipFormat) {
-                return stateZipFormat[1].trim();
+            const streetSuffixPattern = /\b(?:county\s+(?:road|rd)|co\.?\s*rd|cr|street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|lane|ln|court|ct|place|pl|terrace|ter|parkway|pkwy|circle|cir|trail|trl|way|highway|hwy)\.?\b/i;
+            const streetSuffixMatch = candidate.match(streetSuffixPattern);
+            if (!streetSuffixMatch) {
+                return /^\d/.test(candidate) ? '' : candidate;
+            }
+
+            const streetSuffix = streetSuffixMatch[0];
+            candidate = cleanCityCandidateForFilename(candidate.slice(streetSuffixMatch.index + streetSuffix.length));
+            if (!candidate) return '';
+
+            if (/^(?:county\s+(?:road|rd)|co\.?\s*rd|cr|highway|hwy)$/i.test(streetSuffix)) {
+                candidate = cleanCityCandidateForFilename(candidate.replace(/^(?:[A-Z]{1,5}\d*|\d+[A-Z]?)\s+(?=[A-Za-z])/, ''));
+            }
+
+            return candidate;
+        }
+
+        function extractCityFromText(text) {
+            const rawValue = String(text || '').trim();
+            if (!rawValue) return '';
+
+            const rawLines = rawValue
+                .replace(/\r/g, '\n')
+                .split(/\n+/)
+                .map(line => normalizeCitySpacingInLine(line))
+                .filter(Boolean);
+
+            const normalizedCandidates = rawLines.length
+                ? [...rawLines, normalizeCitySpacingInLine(rawLines.join(' '))]
+                : [normalizeCitySpacingInLine(rawValue)];
+
+            for (const candidate of normalizedCandidates) {
+                const commaStateZip = candidate.match(/^(.+?)\s*,\s*[A-Za-z]{2}\s+\d{5}(?:-\d{4})?\b/);
+                if (commaStateZip) {
+                    const city = stripStreetPrefixFromCityCandidate(commaStateZip[1]);
+                    if (city) return city;
+                }
+
+                const commaState = candidate.match(/^(.+?)\s*,\s*[A-Za-z]{2}\b/);
+                if (commaState) {
+                    const city = stripStreetPrefixFromCityCandidate(commaState[1]);
+                    if (city) return city;
+                }
+
+                const stateZip = candidate.match(/^(.+?)\s+[A-Za-z]{2}\s+\d{5}(?:-\d{4})?\b/);
+                if (stateZip) {
+                    const city = stripStreetPrefixFromCityCandidate(stateZip[1]);
+                    if (city) return city;
+                }
             }
 
             return '';
@@ -1291,8 +1342,11 @@
                     const address = String(item.address || '').trim();
                     const parsed = parseDescriptionFields(item.description || '');
                     const addressFallback = String(parsed.address || '').trim();
-                    const city = extractCityFromText(address || addressFallback);
-                    if (city) return city;
+                    const cityCandidates = [address, addressFallback].filter(Boolean);
+                    for (const candidate of cityCandidates) {
+                        const city = extractCityFromText(candidate);
+                        if (city) return city;
+                    }
                 }
             }
 
