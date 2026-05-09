@@ -1363,8 +1363,32 @@
             return '';
         }
 
+        function getDocumentTypeForFilename(data) {
+            return /\bbid\b/i.test(String(data.documentType || '')) ? 'Bid' : 'Invoice';
+        }
+
+        function isLikelyAddressOnlyFilenameCandidate(value) {
+            const text = normalizeSpace(value);
+            if (!text) return false;
+
+            return /^\d+\s+/.test(text)
+                || /,\s*[A-Za-z]{2}\b/.test(text)
+                || /\b[A-Za-z]{2}\s+\d{5}(?:-\d{4})?\b/.test(text)
+                || /\b(?:county\s+(?:road|rd)|co\.?\s*rd|cr|street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|lane|ln|court|ct|place|pl|terrace|ter|parkway|pkwy|circle|cir|trail|trl|way|highway|hwy)\.?\b/i.test(text);
+        }
+
+        function normalizeWorkCandidateForFilename(value, documentType) {
+            const documentWord = getDocumentTypeForFilename({ documentType }).toLowerCase();
+            const documentPrefixPattern = new RegExp(`^${documentWord}\\b\\s*(?:for\\b\\s*)?`, 'i');
+            return normalizeFilenamePart(value, 80)
+                .replace(documentPrefixPattern, '')
+                .replace(/^(?:for|to)\b\s*/i, '')
+                .trim();
+        }
+
         function getDescriptorForFilename(data) {
             const candidates = [];
+            const documentType = getDocumentTypeForFilename(data);
 
             if (Array.isArray(data.items)) {
                 for (const item of data.items) {
@@ -1372,33 +1396,34 @@
                     const work = String(item.work || '').trim();
                     if (work) candidates.push(work);
 
-                    if (!work) {
-                        const parsed = parseDescriptionFields(item.description || '');
-                        if (parsed.work) candidates.push(parsed.work);
+                    const description = String(item.description || '').trim();
+                    const parsed = parseDescriptionFields(description);
+                    if (parsed.work) candidates.push(parsed.work);
+
+                    if (!work && !parsed.work && description) {
+                        const address = normalizeSpace(item.address || '');
+                        const normalizedDescription = normalizeSpace(description);
+                        if (
+                            normalizedDescription !== address &&
+                            !isLikelyAddressOnlyFilenameCandidate(normalizedDescription)
+                        ) {
+                            candidates.push(normalizedDescription);
+                        }
                     }
                 }
             }
 
-            candidates.push(String(data.documentType || '').trim());
-
-            const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'to', 'of', 'a', 'an', 'at', 'on', 'in']);
-
             for (const candidate of candidates) {
-                const words = normalizeFilenamePart(candidate, 80)
+                const words = normalizeWorkCandidateForFilename(candidate, documentType)
                     .split(/\s+/)
                     .map(word => word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, ''))
-                    .filter(Boolean)
-                    .filter(word => !stopWords.has(word.toLowerCase()));
+                    .filter(Boolean);
 
                 if (words.length >= 2) {
-                    return `${words[0]} ${words[1]}`;
+                    return words.slice(0, 5).join(' ');
                 }
 
                 if (words.length === 1) {
-                    const docWord = normalizeFilenamePart(data.documentType || 'Work', 20).split(/\s+/).find(Boolean) || 'Work';
-                    if (words[0].toLowerCase() !== docWord.toLowerCase()) {
-                        return `${words[0]} ${docWord}`;
-                    }
                     return `${words[0]} Work`;
                 }
             }
@@ -1438,16 +1463,17 @@
 
         function buildPdfFileName(data) {
             const sourceData = data && typeof data === 'object' ? data : {};
-            const descriptorRaw = normalizeFilenamePart(getDescriptorForFilename(sourceData), 36) || 'Service Work';
+            const documentType = normalizeFilenamePart(getDocumentTypeForFilename(sourceData), 12) || 'Invoice';
+            const descriptorRaw = normalizeFilenamePart(getDescriptorForFilename(sourceData), 48) || 'Service Work';
             const descriptorWords = descriptorRaw.split(/\s+/).filter(Boolean);
             const descriptor = descriptorWords.length >= 2
-                ? `${descriptorWords[0]} ${descriptorWords[1]}`
+                ? descriptorRaw
                 : `${descriptorWords[0] || 'Service'} Work`;
 
             const city = normalizeFilenamePart(getCityForFilename(sourceData), 28) || 'Unknown City';
             const datePart = formatFilenameDate(sourceData.invoiceDate || new Date().toISOString().split('T')[0]);
             const safeDate = datePart || formatFilenameDate(new Date().toISOString()) || String(Date.now());
-            let baseName = `${descriptor} - ${city} - ${safeDate}`.replace(/\s{2,}/g, ' ').trim();
+            let baseName = `${documentType} - ${descriptor} - ${city} - ${safeDate}`.replace(/\s{2,}/g, ' ').trim();
 
             return sanitizeFileName(baseName, 'pdf');
         }
