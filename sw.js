@@ -1,5 +1,5 @@
-const APP_CACHE = "invoice-generator-v2-shell-v11";
-const RUNTIME_CACHE = "invoice-generator-v2-runtime-v8";
+const APP_CACHE = "invoice-generator-v2-shell-v12";
+const RUNTIME_CACHE = "invoice-generator-v2-runtime-v9";
 const CACHE_PREFIX = "invoice-generator-v2-";
 const OFFLINE_FALLBACK = "./index.html";
 

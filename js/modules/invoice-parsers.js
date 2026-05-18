@@ -202,6 +202,45 @@
             return isWrappedNegative ? -Math.abs(parsed) : parsed;
         }
 
+        function normalizeComparableText(value) {
+            return normalizeSpace(String(value || '').replace(/\r/g, '\n').replace(/\n+/g, ' ')).toLowerCase();
+        }
+
+        function stripLeadingTextBlock(value, block) {
+            const text = String(value || '').replace(/\r/g, '\n').trim();
+            const blockText = String(block || '').replace(/\r/g, '\n').trim();
+            if (!text || !blockText) return text;
+
+            const blockLines = blockText.split(/\n+/).map(line => line.trim()).filter(Boolean);
+            let textLines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+            let removedLinePrefix = false;
+
+            while (blockLines.length && textLines.length >= blockLines.length) {
+                const textPrefix = textLines.slice(0, blockLines.length).join(' ');
+                const blockPrefix = blockLines.join(' ');
+                if (normalizeComparableText(textPrefix) !== normalizeComparableText(blockPrefix)) {
+                    break;
+                }
+                textLines = textLines.slice(blockLines.length);
+                removedLinePrefix = true;
+            }
+
+            if (removedLinePrefix) {
+                return textLines.join('\n').trim();
+            }
+
+            const comparableText = normalizeComparableText(text);
+            const comparableBlock = normalizeComparableText(blockText);
+            if (comparableText === comparableBlock) return '';
+
+            const escapedBlock = blockText
+                .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                .replace(/\s+/g, '\\s+');
+            const leadingBlockPattern = new RegExp(`^\\s*${escapedBlock}\\s*(?:[-|:\\u2013\\u2014,]+\\s*)?`, 'i');
+            const stripped = text.replace(leadingBlockPattern, '').trim();
+            return stripped !== text ? stripped : text;
+        }
+
         function normalizeDocumentType(value) {
             return /\bbid\b/i.test(String(value || '')) ? 'Bid' : 'Invoice';
         }
@@ -455,7 +494,27 @@
             if ((!address || !work) && rawDescription) {
                 const parsed = parseDescriptionFields(rawDescription);
                 if (!address && !work) address = normalizeAddressBlock(parsed.address || '', { includePhone: false });
-                if (!work) work = parsed.work;
+                if (!work) {
+                    if (address) {
+                        const descriptionWithoutAddress = stripLeadingTextBlock(rawDescription, address);
+                        if (normalizeComparableText(descriptionWithoutAddress) !== normalizeComparableText(rawDescription)) {
+                            work = descriptionWithoutAddress;
+                        } else if (parsed.work) {
+                            work = parsed.work;
+                        } else if (!normalizeComparableText(address).startsWith(normalizeComparableText(rawDescription))) {
+                            work = rawDescription;
+                        }
+                    } else {
+                        work = parsed.work;
+                    }
+                    if (address && normalizeComparableText(work) === normalizeComparableText(address)) {
+                        work = '';
+                    }
+                }
+            }
+
+            if (address && work) {
+                work = stripLeadingTextBlock(work, address);
             }
 
             const description = [address, work].filter(Boolean).join('\n') || rawDescription;
