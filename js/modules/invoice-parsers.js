@@ -92,6 +92,89 @@
             return raw;
         }
 
+        const STREET_SUFFIX_PATTERN = '(?:st|street|rd|road|ave|avenue|blvd|boulevard|dr|drive|ln|lane|ct|court|pl|place|ter|terrace|pkwy|parkway|cir|circle|trl|trail|way|hwy|highway)';
+
+        function escapeRegExp(value) {
+            return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function looksLikeStreetLine(value) {
+            const line = normalizeSpace(value);
+            if (!line) return false;
+            return /^(?:\d+|[NSEW]\d+|[NSEW]\s+\d+)\b/i.test(line)
+                || new RegExp(`\\b${STREET_SUFFIX_PATTERN}\\.?\\b`, 'i').test(line);
+        }
+
+        function extractLocalityTail(value) {
+            const raw = normalizeCitySpacingInLine(value);
+            const match = raw.match(/^(.+?),?\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+            if (!match) return '';
+
+            let city = normalizeSpace(match[1].replace(/,\s*$/, ''));
+            const state = match[2].toUpperCase();
+            const zip = match[3];
+            const streetCityMatch = city.match(new RegExp(`\\b${STREET_SUFFIX_PATTERN}\\.?\\s+([A-Za-z][A-Za-z .'-]*)$`, 'i'));
+            if (streetCityMatch && looksLikeStreetLine(city)) {
+                city = normalizeSpace(streetCityMatch[1]);
+            }
+
+            return city ? `${city}, ${state} ${zip}` : '';
+        }
+
+        function extractCityFromLocality(value) {
+            const locality = extractLocalityTail(value) || normalizeLocalityLine(value);
+            const match = locality.match(/^(.+?),\s+[A-Z]{2}\s+\d{5}(?:-\d{4})?$/i);
+            return match ? normalizeSpace(match[1]) : '';
+        }
+
+        function collapseRepeatedTokenRun(value) {
+            const tokens = normalizeSpace(value).split(/\s+/).filter(Boolean);
+            if (tokens.length < 4) return normalizeSpace(value);
+
+            const maxBlockSize = Math.floor(tokens.length / 2);
+            for (let blockSize = 1; blockSize <= maxBlockSize; blockSize += 1) {
+                const block = tokens.slice(0, blockSize);
+                let index = blockSize;
+                let repeats = 1;
+
+                while (index + blockSize <= tokens.length) {
+                    const nextBlock = tokens.slice(index, index + blockSize);
+                    if (normalizeComparableText(nextBlock.join(' ')) !== normalizeComparableText(block.join(' '))) {
+                        break;
+                    }
+                    repeats += 1;
+                    index += blockSize;
+                }
+
+                if (repeats > 1) {
+                    return [...block, ...tokens.slice(index)].join(' ').trim();
+                }
+            }
+
+            return normalizeSpace(value);
+        }
+
+        function collapseRepeatedStreetLine(value, localityLine = '') {
+            let line = normalizeCitySpacingInLine(value);
+            const city = extractCityFromLocality(localityLine);
+
+            if (city) {
+                const cityPattern = escapeRegExp(city);
+                line = line.replace(new RegExp(`(${cityPattern})(?=(?:[NSEW]?\\d+|\\d+)\\s+)`, 'ig'), '$1 ');
+
+                const cityIndex = line.toLowerCase().indexOf(city.toLowerCase());
+                if (cityIndex > 0) {
+                    const streetCandidate = normalizeSpace(line.slice(0, cityIndex));
+                    const afterCity = normalizeSpace(line.slice(cityIndex + city.length));
+                    if (looksLikeStreetLine(streetCandidate) && (!afterCity || looksLikeStreetLine(afterCity) || /\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/i.test(afterCity))) {
+                        return streetCandidate;
+                    }
+                }
+            }
+
+            return collapseRepeatedTokenRun(line);
+        }
+
         function normalizeAddressBlock(value, options = {}) {
             const includePhone = options.includePhone !== false;
             const raw = String(value || '').replace(/\r/g, '\n').trim();
@@ -120,38 +203,57 @@
                 .map(part => normalizeSpace(part))
                 .filter(Boolean);
 
-            let streetLine = rawLines.find(line => /^\d+\s+/.test(line)) || '';
+            let streetLine = rawLines.find(looksLikeStreetLine) || '';
             let localityLine = rawLines.find(line => {
                 return /\d{5}(?:-\d{4})?/.test(line)
                     || /,\s*[A-Za-z]{2}\b/.test(line)
                     || /\b[A-Za-z]{2}\s+\d{5}(?:-\d{4})?\b/.test(line);
             }) || '';
+            let consumedStreetLine = streetLine;
+            let consumedLocalityLine = localityLine;
+
+            if (rawLines.length === 1) {
+                const combinedLocalityLine = extractLocalityTail(rawLines[0]);
+                if (combinedLocalityLine) {
+                    consumedStreetLine = rawLines[0];
+                    consumedLocalityLine = rawLines[0];
+                    localityLine = combinedLocalityLine;
+                    streetLine = collapseRepeatedStreetLine(rawLines[0], combinedLocalityLine);
+                }
+            }
 
             if (!streetLine && commaParts.length) {
-                streetLine = commaParts.find(part => /^\d+\s+/.test(part)) || commaParts[0] || '';
+                streetLine = commaParts.find(looksLikeStreetLine) || commaParts[0] || '';
+                consumedStreetLine = streetLine;
             }
 
             if (!localityLine && commaParts.length >= 2) {
                 localityLine = commaParts.slice(1).join(', ');
+                consumedLocalityLine = localityLine;
             }
 
             if ((!streetLine || !localityLine) && rawLines.length === 1) {
                 const singleLine = rawLines[0];
-                const oneLineMatch = singleLine.match(/^(\d+\s+[^,]+),?\s+(.+)$/);
+                const oneLineMatch = singleLine.match(/^((?:\d+|[NSEW]\d+|[NSEW]\s+\d+)\s+[^,]+),?\s+(.+)$/i);
                 if (oneLineMatch) {
                     if (!streetLine) streetLine = normalizeSpace(oneLineMatch[1]);
                     if (!localityLine) localityLine = normalizeSpace(oneLineMatch[2]);
+                    consumedStreetLine = singleLine;
+                    consumedLocalityLine = singleLine;
                 }
             }
 
             if (!streetLine) {
                 streetLine = rawLines[0] || '';
+                consumedStreetLine = rawLines[0] || '';
             }
 
-            streetLine = normalizeCitySpacingInLine(streetLine);
+            const normalizedLocality = extractLocalityTail(localityLine) || normalizeLocalityLine(localityLine);
+            streetLine = collapseRepeatedStreetLine(streetLine, normalizedLocality || localityLine);
             localityLine = normalizeCitySpacingInLine(localityLine);
 
             const suiteLine = rawLines.find(line => {
+                if (line === consumedStreetLine || line === consumedLocalityLine) return false;
                 if (line === streetLine || line === localityLine) return false;
                 return /\b(?:apt|apartment|suite|ste|unit|#)\b/i.test(line);
             });
@@ -164,8 +266,9 @@
                 localityLine = rawLines.find(line => line !== streetLine && line !== suiteLine) || '';
             }
 
-            const normalizedLocality = normalizeLocalityLine(localityLine);
             const extraLines = rawLines.filter(line => {
+                if (line === consumedStreetLine) return false;
+                if (line === consumedLocalityLine) return false;
                 if (line === streetLine) return false;
                 if (line === localityLine) return false;
                 if (line === suiteLine) return false;
