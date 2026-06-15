@@ -2,10 +2,12 @@
         const PDF_WORKER_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
         const GEMINI_DEFAULT_MODEL = 'gemini-3-flash-preview';
-        const GEMINI_FALLBACK_MODELS = Object.freeze(['gemini-3-flash-preview-02-05']);
+        const GEMINI_FALLBACK_MODELS = Object.freeze(['gemini-3-flash-preview-02-05', 'gemini-2.5-flash']);
         const GEMINI_REQUEST_TIMEOUT_MS = 90000;
         const GEMINI_THINKING_LEVEL_MINIMAL = 'minimal';
+        const GEMINI_FALLBACK_THINKING_BUDGET = 1024;
         const GEMINI_API_KEY_STORAGE_KEY = 'invoice_get_gemini_api_key';
+        const GEMINI_MODEL_STORAGE_KEY = 'invoice_get_gemini_model';
         const DEFAULT_COMPANY_STORAGE_KEY = 'invoice_get_default_company';
         const LEGACY_DEFAULT_BILLING_STORAGE_KEY = 'invoice_get_default_billing';
         const CHAT_TO_TEMPLATE_MAX_CHARS = 12000;
@@ -412,22 +414,42 @@
             return normalizeSpace(localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
         }
 
+        function getConfiguredGeminiModel() {
+            const input = document.getElementById('geminiModel');
+            const valueFromInput = normalizeSpace(input ? input.value : '');
+            if (valueFromInput) return valueFromInput;
+            return normalizeSpace(localStorage.getItem(GEMINI_MODEL_STORAGE_KEY) || GEMINI_DEFAULT_MODEL) || GEMINI_DEFAULT_MODEL;
+        }
+
         function loadGeminiSettings() {
             const savedKey = normalizeSpace(localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
+            const savedModelRaw = normalizeSpace(localStorage.getItem(GEMINI_MODEL_STORAGE_KEY) || '');
+            let savedModel = savedModelRaw || GEMINI_DEFAULT_MODEL;
+            if (savedModel === 'gemini-3-flash-preview-02-05' || savedModel === 'gemini-2.5-flash-lite') {
+                savedModel = GEMINI_DEFAULT_MODEL;
+                localStorage.setItem(GEMINI_MODEL_STORAGE_KEY, savedModel);
+            }
             const keyInput = document.getElementById('geminiApiKey');
+            const modelInput = document.getElementById('geminiModel');
 
             if (keyInput) keyInput.value = savedKey;
+            if (modelInput) modelInput.value = savedModel;
             appendImportDebug('Gemini settings loaded', {
+                model: savedModel,
                 hasApiKey: Boolean(savedKey)
             });
         }
 
         function saveGeminiSettings(showConfirmation = false) {
             const apiKey = getConfiguredGeminiApiKey();
+            const model = getConfiguredGeminiModel();
             localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+            localStorage.setItem(GEMINI_MODEL_STORAGE_KEY, model);
             const keyInput = document.getElementById('geminiApiKey');
+            const modelInput = document.getElementById('geminiModel');
             if (keyInput) keyInput.value = apiKey;
-            appendImportDebug('Gemini settings saved', { hasApiKey: Boolean(apiKey) });
+            if (modelInput) modelInput.value = model;
+            appendImportDebug('Gemini settings saved', { model, hasApiKey: Boolean(apiKey) });
             if (showConfirmation) {
                 showToast('Gemini settings saved');
             }
@@ -435,8 +457,11 @@
 
         function clearGeminiSettings() {
             localStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
+            localStorage.removeItem(GEMINI_MODEL_STORAGE_KEY);
             const keyInput = document.getElementById('geminiApiKey');
+            const modelInput = document.getElementById('geminiModel');
             if (keyInput) keyInput.value = '';
+            if (modelInput) modelInput.value = GEMINI_DEFAULT_MODEL;
             appendImportDebug('Gemini settings cleared');
             showToast('Gemini settings cleared', 'info');
         }
@@ -1707,9 +1732,10 @@
 
         function generatePDF() {
             updateInvoice();
+            const exportInvoiceData = normalizeInvoiceData(invoiceData);
             const element = document.getElementById('invoice-preview');
-            const fileName = buildPdfFileName(invoiceData);
-            const embeddedPayloadText = createEmbeddedInvoicePayloadText(invoiceData);
+            const fileName = buildPdfFileName(exportInvoiceData);
+            const embeddedPayloadText = createEmbeddedInvoicePayloadText(exportInvoiceData);
             showToast('Generating PDF...', 'info');
 
             const exportNode = element.cloneNode(true);
@@ -1782,7 +1808,8 @@
                 });
 
                 preparePdf.then(() => worker.save()).then(() => {
-                    showToast('PDF downloaded successfully');
+                    const savedTemplate = saveDownloadedPdfTemplate(exportInvoiceData);
+                    showToast(savedTemplate ? 'PDF downloaded and template saved' : 'PDF downloaded successfully');
                 }).catch(err => {
                     console.error(err);
                     showToast('Error generating PDF', 'error');
@@ -1830,7 +1857,8 @@
                 addSelectableTextLayerToPdf(pdf, exportNode);
                 embedPayloadTextInPdf(pdf, embeddedPayloadText);
                 pdf.save(fileName);
-                showToast('PDF downloaded successfully');
+                const savedTemplate = saveDownloadedPdfTemplate(exportInvoiceData);
+                showToast(savedTemplate ? 'PDF downloaded and template saved' : 'PDF downloaded successfully');
             }).catch(err => {
                 console.error(err);
                 showToast('Error generating PDF', 'error');
@@ -1851,13 +1879,13 @@
             }
         }
 
-        function createTemplateSnapshot(name, existingTemplate = null) {
+        function createTemplateSnapshot(name, existingTemplate = null, data = invoiceData) {
             const existingId = Number(existingTemplate && existingTemplate.id);
             return {
                 id: Number.isFinite(existingId) && existingId > 0 ? existingId : Date.now(),
                 name: name,
                 date: new Date().toLocaleDateString(),
-                data: JSON.parse(JSON.stringify(invoiceData))
+                data: cloneInvoiceDataSnapshot(data)
             };
         }
 
@@ -1886,8 +1914,8 @@
             });
         }
 
-        function cloneInvoiceDataSnapshot() {
-            return JSON.parse(JSON.stringify(invoiceData));
+        function cloneInvoiceDataSnapshot(data = invoiceData) {
+            return JSON.parse(JSON.stringify(normalizeInvoiceData(data)));
         }
 
         function stringifyTemplateData(data) {
@@ -1953,7 +1981,7 @@
             }
 
             const existingTemplate = existingIndex >= 0 ? savedTemplates[existingIndex] : null;
-            const template = createTemplateSnapshot(normalizedName, existingTemplate);
+            const template = createTemplateSnapshot(normalizedName, existingTemplate, options.data || invoiceData);
 
             if (existingIndex >= 0) {
                 if (options.confirmOverwrite && !confirm('A template with this name exists. Overwrite?')) {
@@ -2022,6 +2050,34 @@
             const fileName = String(file && file.name ? file.name : '').trim();
             const baseName = normalizeSpace(fileName.replace(/\.[^.]+$/, ''));
             return baseName || 'Imported PDF';
+        }
+
+        function buildDownloadedPdfTemplateName(data) {
+            const sourceData = data && typeof data === 'object' ? data : {};
+            const address = normalizeFilenamePart(getPrimaryTemplateAddress(sourceData), 56);
+            const documentType = normalizeFilenamePart(getDocumentTypeForFilename(sourceData), 12) || 'Invoice';
+            const descriptorRaw = normalizeFilenamePart(getDescriptorForFilename(sourceData), 32) || 'Service Work';
+            const descriptorWords = descriptorRaw.split(/\s+/).filter(Boolean);
+            const descriptor = descriptorWords.length >= 2
+                ? descriptorRaw
+                : `${descriptorWords[0] || 'Service'} Work`;
+            const datePart = formatFilenameDate(sourceData.invoiceDate || new Date().toISOString().split('T')[0]);
+            const safeDate = datePart || formatFilenameDate(new Date().toISOString()) || String(Date.now());
+
+            if (address) {
+                return [address, documentType, descriptor, safeDate].filter(Boolean).join(' - ');
+            }
+
+            const city = normalizeFilenamePart(getCityForFilename(sourceData), 28);
+            return [documentType, descriptor, city, safeDate].filter(Boolean).join(' - ');
+        }
+
+        function saveDownloadedPdfTemplate(data) {
+            const template = upsertTemplate(buildDownloadedPdfTemplateName(data), { data });
+            if (template) {
+                clearAddressTemplateAutoSaveMarkers();
+            }
+            return template;
         }
 
         function saveImportedPdfTemplate(file) {

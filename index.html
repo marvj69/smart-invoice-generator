@@ -447,6 +447,11 @@
                         <input type="password" id="geminiApiKey" placeholder="AIza..." autocomplete="off"
                             class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
                     </div>
+                    <div class="space-y-1">
+                        <label for="geminiModel" class="block text-xs font-medium text-blue-900">Model</label>
+                        <input type="text" id="geminiModel" placeholder="gemini-3-flash-preview"
+                            class="w-full px-3 py-2 border border-blue-200 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    </div>
                     <div class="flex gap-2">
                         <button onclick="saveGeminiSettings(true)" class="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">
                             Save
@@ -455,7 +460,7 @@
                             Clear
                         </button>
                     </div>
-                    <p class="text-[11px] text-blue-800">Model: <code>gemini-3-flash-preview</code></p>
+                    <p class="text-[11px] text-blue-800">Default model: <code>gemini-3-flash-preview</code></p>
                 </div>
                 <div class="bg-emerald-50 rounded-lg p-4 space-y-3">
                     <div class="flex items-center justify-between gap-2">

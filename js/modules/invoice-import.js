@@ -121,8 +121,12 @@
             ].join('\n');
         }
 
-        function buildGeminiThinkingConfig() {
-            return { thinkingLevel: GEMINI_THINKING_LEVEL_MINIMAL };
+        function buildGeminiThinkingConfig(model) {
+            const normalizedModel = normalizeSpace(model).toLowerCase();
+            if (normalizedModel.startsWith('gemini-3')) {
+                return { thinkingLevel: GEMINI_THINKING_LEVEL_MINIMAL };
+            }
+            return { thinkingBudget: GEMINI_FALLBACK_THINKING_BUDGET };
         }
 
         function buildGeminiInvoiceRequestBody(model, base64Payload, useSchema = true) {
@@ -144,7 +148,7 @@
                 generationConfig: {
                     temperature: 0,
                     responseMimeType: 'application/json',
-                    thinkingConfig: buildGeminiThinkingConfig()
+                    thinkingConfig: buildGeminiThinkingConfig(model)
                 }
                 
             };
@@ -169,7 +173,7 @@
                 generationConfig: {
                     temperature: 0,
                     responseMimeType: 'application/json',
-                    thinkingConfig: buildGeminiThinkingConfig()
+                    thinkingConfig: buildGeminiThinkingConfig(model)
                 }
             };
 
@@ -204,8 +208,9 @@
                 || text.includes('permission denied');
         }
 
-        function getGeminiModelCandidates() {
-            const candidates = [GEMINI_DEFAULT_MODEL, ...GEMINI_FALLBACK_MODELS];
+        function getGeminiModelCandidates(preferredModel) {
+            const first = normalizeSpace(preferredModel) || GEMINI_DEFAULT_MODEL;
+            const candidates = [first, GEMINI_DEFAULT_MODEL, ...GEMINI_FALLBACK_MODELS];
             const unique = [];
             candidates.forEach(model => {
                 const normalized = normalizeSpace(model);
@@ -315,10 +320,11 @@
 
         async function extractInvoiceDataFromPdfWithGemini(file) {
             const apiKey = getConfiguredGeminiApiKey();
+            const model = getConfiguredGeminiModel();
             appendImportDebug('Gemini PDF extraction requested', {
                 fileName: file && file.name ? file.name : '',
                 fileSize: file && Number.isFinite(file.size) ? file.size : 0,
-                defaultModel: GEMINI_DEFAULT_MODEL
+                configuredModel: model
             });
 
             if (!apiKey) {
@@ -336,7 +342,7 @@
             }
             appendImportDebug('PDF encoded for Gemini', { base64Length: base64Payload.length });
 
-            const modelCandidates = getGeminiModelCandidates();
+            const modelCandidates = getGeminiModelCandidates(model);
             appendImportDebug('Gemini model candidates', modelCandidates.join(', '));
             let lastErrorMessage = '';
 
@@ -555,9 +561,10 @@
             }
 
             const apiKey = getConfiguredGeminiApiKey();
+            const model = getConfiguredGeminiModel();
             appendImportDebug('Gemini chat extraction requested', {
                 promptLength: normalizedPrompt.length,
-                defaultModel: GEMINI_DEFAULT_MODEL
+                configuredModel: model
             });
 
             if (!apiKey) {
@@ -567,7 +574,7 @@
 
             saveGeminiSettings(false);
 
-            const modelCandidates = getGeminiModelCandidates();
+            const modelCandidates = getGeminiModelCandidates(model);
             appendImportDebug('Gemini model candidates', modelCandidates.join(', '));
             let lastErrorMessage = '';
 
