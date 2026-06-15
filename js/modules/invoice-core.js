@@ -1624,6 +1624,112 @@
             }
         }
 
+        function getSelectablePdfTextNodes(root) {
+            if (!root || typeof document.createTreeWalker !== 'function') return [];
+
+            const nodes = [];
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    const text = normalizeSpace(node && node.nodeValue);
+                    if (!text) return NodeFilter.FILTER_REJECT;
+
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+
+                    const style = window.getComputedStyle(parent);
+                    if (
+                        style.display === 'none' ||
+                        style.visibility === 'hidden' ||
+                        style.opacity === '0' ||
+                        style.fontSize === '0px'
+                    ) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+
+            while (walker.nextNode()) {
+                nodes.push(walker.currentNode);
+            }
+
+            return nodes;
+        }
+
+        function addSelectableTextLayerToPdf(pdf, sourceNode) {
+            if (!pdf || !sourceNode || typeof pdf.text !== 'function') return;
+            if (!sourceNode.getBoundingClientRect || typeof document.createRange !== 'function') return;
+
+            const rootRect = sourceNode.getBoundingClientRect();
+            if (!rootRect.width || !rootRect.height) return;
+
+            const pageHeight = pdf.internal && pdf.internal.pageSize && typeof pdf.internal.pageSize.getHeight === 'function'
+                ? pdf.internal.pageSize.getHeight()
+                : 297;
+            const xScale = PAPER_WIDTH_MM / rootRect.width;
+            const pageCount = typeof pdf.getNumberOfPages === 'function'
+                ? Math.max(1, pdf.getNumberOfPages())
+                : 1;
+            const originalPage = typeof pdf.getCurrentPageInfo === 'function'
+                ? pdf.getCurrentPageInfo().pageNumber
+                : pageCount;
+            const previousSize = typeof pdf.getFontSize === 'function' ? pdf.getFontSize() : null;
+
+            try {
+                if (typeof pdf.setTextColor === 'function') {
+                    pdf.setTextColor(255, 255, 255);
+                }
+
+                getSelectablePdfTextNodes(sourceNode).forEach(node => {
+                    const text = normalizeSpace(node.nodeValue);
+                    if (!text) return;
+
+                    const range = document.createRange();
+                    range.selectNodeContents(node);
+                    const rects = Array.from(range.getClientRects())
+                        .filter(rect => rect.width > 0 && rect.height > 0);
+                    range.detach();
+
+                    if (!rects.length) return;
+
+                    const rect = rects[0];
+                    const parentStyle = window.getComputedStyle(node.parentElement);
+                    const fontSizePx = parseFloat(parentStyle.fontSize) || rect.height || 12;
+                    const x = Math.max(0, (rect.left - rootRect.left) * xScale);
+                    const absoluteY = Math.max(0, (rect.top - rootRect.top + fontSizePx * 0.82) * xScale);
+                    const pageNumber = Math.min(pageCount, Math.max(1, Math.floor(absoluteY / pageHeight) + 1));
+                    const y = absoluteY - ((pageNumber - 1) * pageHeight);
+                    const fontSizeMm = Math.max(1, fontSizePx * xScale);
+
+                    if (typeof pdf.setPage === 'function') {
+                        pdf.setPage(pageNumber);
+                    }
+                    if (typeof pdf.setFontSize === 'function') {
+                        pdf.setFontSize(fontSizeMm);
+                    }
+
+                    pdf.text(text, x, y, {
+                        baseline: 'alphabetic',
+                        maxWidth: Math.max(1, rect.width * xScale),
+                        renderingMode: 'invisible'
+                    });
+                });
+            } catch (error) {
+                console.warn('Failed to add selectable PDF text layer', error);
+            } finally {
+                if (Number.isFinite(previousSize) && typeof pdf.setFontSize === 'function') {
+                    pdf.setFontSize(previousSize);
+                }
+                if (typeof pdf.setTextColor === 'function') {
+                    pdf.setTextColor(0, 0, 0);
+                }
+                if (typeof pdf.setPage === 'function') {
+                    pdf.setPage(originalPage);
+                }
+            }
+        }
+
         function generatePDF() {
             updateInvoice();
             const element = document.getElementById('invoice-preview');
@@ -1695,11 +1801,12 @@
                     }
                 }).from(exportNode).toPdf();
 
-                worker.get('pdf').then(pdf => {
+                const preparePdf = worker.get('pdf').then(pdf => {
+                    addSelectableTextLayerToPdf(pdf, exportNode);
                     embedPayloadTextInPdf(pdf, embeddedPayloadText);
                 });
 
-                worker.save().then(() => {
+                preparePdf.then(() => worker.save()).then(() => {
                     showToast('PDF downloaded successfully');
                 }).catch(err => {
                     console.error(err);
@@ -1745,6 +1852,7 @@
                     }
                 }
 
+                addSelectableTextLayerToPdf(pdf, exportNode);
                 embedPayloadTextInPdf(pdf, embeddedPayloadText);
                 pdf.save(fileName);
                 showToast('PDF downloaded successfully');
