@@ -284,6 +284,11 @@
             return outputLines.join('\n').trim();
         }
 
+        function normalizeAddressForSingleLine(value, options = {}) {
+            const normalizedBlock = normalizeAddressBlock(value, options);
+            return normalizeSpace(normalizedBlock || value);
+        }
+
         function toNumber(value, fallback = 0) {
             if (typeof value === 'number') {
                 return Number.isFinite(value) ? value : fallback;
@@ -590,13 +595,13 @@
 
         function normalizeLineItem(item) {
             const source = item && typeof item === 'object' ? item : {};
-            let address = normalizeAddressBlock(source.address || source.propertyAddress || '', { includePhone: false });
+            let address = normalizeAddressForSingleLine(source.address || source.propertyAddress || '', { includePhone: false });
             let work = String(source.work || source.workDone || '').trim();
             const rawDescription = String(source.description || source.item || '').trim();
 
             if ((!address || !work) && rawDescription) {
                 const parsed = parseDescriptionFields(rawDescription);
-                if (!address && !work) address = normalizeAddressBlock(parsed.address || '', { includePhone: false });
+                if (!address && !work) address = normalizeAddressForSingleLine(parsed.address || '', { includePhone: false });
                 if (!work) {
                     if (address) {
                         const descriptionWithoutAddress = stripLeadingTextBlock(rawDescription, address);

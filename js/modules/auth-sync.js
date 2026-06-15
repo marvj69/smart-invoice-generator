@@ -65,9 +65,13 @@ async function apiRequest(path, options = {}) {
 function normalizeTemplateForCloud(template, index) {
     const source = template && typeof template === 'object' ? template : {};
     const numericId = Number(source.id);
+    const rawName = String(source.name || 'Untitled Template').trim();
+    const normalizedName = typeof normalizeTemplateNameValue === 'function'
+        ? normalizeTemplateNameValue(rawName)
+        : rawName;
     return {
         id: Number.isFinite(numericId) && numericId > 0 ? numericId : Date.now() + index,
-        name: String(source.name || 'Untitled Template').trim().slice(0, 120) || 'Untitled Template',
+        name: (normalizedName || 'Untitled Template').slice(0, 120) || 'Untitled Template',
         date: String(source.date || new Date().toLocaleDateString()).trim(),
         data: normalizeInvoiceData(source.data || {})
     };

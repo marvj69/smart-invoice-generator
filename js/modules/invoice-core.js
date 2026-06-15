@@ -670,7 +670,7 @@
                 const addressInput = row.querySelector('.item-address');
                 const workInput = row.querySelector('.item-work');
                 const descInput = row.querySelector('.item-desc');
-                const address = addressInput ? addressInput.value : '';
+                const address = normalizeLineItemAddressValue(addressInput ? addressInput.value : '');
                 const work = workInput ? workInput.value : '';
                 const fallbackDescription = descInput ? descInput.value : '';
                 const descriptionParts = [];
@@ -1164,7 +1164,7 @@
                 </div>
             `;
 
-            div.querySelector('.item-address').value = normalizedItem.address;
+            div.querySelector('.item-address').value = normalizeLineItemAddressValue(normalizedItem.address);
             div.querySelector('.item-work').value = normalizedItem.work;
             div.querySelector('.item-qty').value = normalizedItem.quantity;
             div.querySelector('.item-rate').value = normalizedItem.rate;
@@ -1868,6 +1868,16 @@
         }
 
         // Template Management
+        function normalizeLineItemAddressValue(value) {
+            return normalizeAddressForSingleLine(value, { includePhone: false });
+        }
+
+        function normalizeTemplateNameValue(value) {
+            const raw = normalizeSpace(value);
+            if (!raw) return '';
+            return normalizeAddressForSingleLine(raw, { includePhone: false }) || raw;
+        }
+
         function persistSavedTemplates() {
             localStorage.setItem('invoiceTemplates', JSON.stringify(savedTemplates));
             const modal = document.getElementById('templateModal');
@@ -1968,11 +1978,11 @@
         }
 
         function upsertTemplate(name, options = {}) {
-            const normalizedName = normalizeSpace(name);
+            const normalizedName = normalizeTemplateNameValue(name);
             if (!normalizedName) return null;
 
             const idIndex = findTemplateIndexById(options.templateId);
-            const nameIndex = savedTemplates.findIndex(template => normalizeSpace(template && template.name) === normalizedName);
+            const nameIndex = savedTemplates.findIndex(template => normalizeTemplateNameValue(template && template.name) === normalizedName);
             let existingIndex = idIndex >= 0 ? idIndex : nameIndex;
 
             if (idIndex >= 0 && nameIndex >= 0 && idIndex !== nameIndex) {
@@ -2001,15 +2011,18 @@
         }
 
         function commitAddressTemplate(input, options = {}) {
-            const address = normalizeSpace(input && input.value);
+            const address = normalizeLineItemAddressValue(input && input.value);
             if (!address) return null;
+            if (input && input.value !== address) {
+                input.value = address;
+            }
 
             if (!(input && input.dataset && input.dataset.autosavedTemplateId) && activeTemplateId) {
                 updateInvoice();
                 return saveActiveTemplateSnapshot();
             }
 
-            const previousAddress = input && input.dataset ? normalizeSpace(input.dataset.autosavedTemplateName) : '';
+            const previousAddress = input && input.dataset ? normalizeTemplateNameValue(input.dataset.autosavedTemplateName) : '';
             if (previousAddress === address) return null;
 
             updateInvoice();
@@ -2032,11 +2045,11 @@
             for (const item of data.items) {
                 if (!item || typeof item !== 'object') continue;
 
-                const address = normalizeSpace(item.address || '');
+                const address = normalizeLineItemAddressValue(item.address || '');
                 if (address) return address;
 
                 const parsed = parseDescriptionFields(item.description || '');
-                const parsedAddress = normalizeSpace(parsed.address || '');
+                const parsedAddress = normalizeLineItemAddressValue(parsed.address || '');
                 if (parsedAddress) return parsedAddress;
             }
 
@@ -2121,6 +2134,11 @@
             if (!template) return;
 
             clearActiveTemplate();
+            const normalizedName = normalizeTemplateNameValue(template.name);
+            if (normalizedName && normalizedName !== template.name) {
+                template.name = normalizedName;
+                persistSavedTemplates();
+            }
             applyInvoiceDataToForm(template.data);
             activateTemplate(template);
             clearAddressTemplateAutoSaveMarkers();
@@ -2165,10 +2183,11 @@
                 const safeId = Number.isFinite(templateId) ? templateId : 0;
                 const itemCount = Array.isArray(template.data && template.data.items) ? template.data.items.length : 0;
                 const companyName = template.data && template.data.companyName ? template.data.companyName : 'No company';
+                const templateName = normalizeTemplateNameValue(template.name) || 'Untitled Template';
                 return `
                 <div onclick="loadTemplate(${safeId})" class="template-card bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-indigo-300 flex justify-between items-center group">
                     <div>
-                        <h3 class="font-semibold text-gray-900">${escapeHtml(template.name)}</h3>
+                        <h3 class="font-semibold text-gray-900">${escapeHtml(templateName)}</h3>
                         <p class="text-xs text-gray-500">Saved on ${escapeHtml(template.date)}</p>
                         <p class="text-xs text-gray-400 mt-1">${itemCount} items • ${escapeHtml(companyName)}</p>
                     </div>
