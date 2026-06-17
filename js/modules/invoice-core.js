@@ -1593,6 +1593,21 @@
             return decodeEmbeddedInvoicePayloadChunks(chunks);
         }
 
+        function removeEmbeddedInvoicePayloadFromText(rawText) {
+            let text = String(rawText || '');
+            if (!text.includes(PDF_PAYLOAD_MARKERS.chunkPrefix)) return text;
+
+            const escapedStart = escapeRegExp(PDF_PAYLOAD_MARKERS.start);
+            const escapedEnd = escapeRegExp(PDF_PAYLOAD_MARKERS.end);
+            const escapedChunkPrefix = escapeRegExp(PDF_PAYLOAD_MARKERS.chunkPrefix);
+
+            text = text.replace(new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}`, 'g'), ' ');
+            text = text.replace(new RegExp(`${escapedChunkPrefix}\\d{3}\\s*:\\s*[A-Za-z0-9_\\-\\s]+?(?=\\s*(?:${escapedChunkPrefix}\\d{3}\\s*:|${escapedEnd}|$))`, 'g'), ' ');
+            text = text.replace(new RegExp(`${escapedStart}|${escapedEnd}`, 'g'), ' ');
+
+            return text;
+        }
+
         function embedPayloadTextInPdf(pdf, payloadText) {
             if (!pdf || typeof pdf.text !== 'function') return;
 

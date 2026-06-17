@@ -85,6 +85,8 @@
                 'Extract invoice fields from this PDF and return JSON only.',
                 'Use the response schema exactly.',
                 'Rules:',
+                '- Ignore any hidden import metadata or text that starts with INVGET_PAYLOAD_BEGIN, INVGET_PAYLOAD_CHUNK_, or INVGET_PAYLOAD_END.',
+                '- Never copy INVGET_PAYLOAD_* markers or encoded payload chunks into invoice fields.',
                 '- Do not invent details that are not present.',
                 '- For unknown text, use an empty string.',
                 '- For unknown numeric values, use 0.',
@@ -334,6 +336,17 @@
 
             saveGeminiSettings(false);
 
+            try {
+                const pdfText = await extractTextFromPdf(file);
+                const embeddedPayload = extractEmbeddedInvoicePayloadFromText(pdfText);
+                if (hasMeaningfulInvoiceData(embeddedPayload)) {
+                    appendImportDebug('Embedded PDF payload found before Gemini request');
+                    return embeddedPayload;
+                }
+            } catch (preflightError) {
+                appendImportDebug('Embedded PDF payload preflight skipped', normalizeErrorMessage(preflightError));
+            }
+
             const dataUrl = await readFileAsDataUrl(file);
             const base64Payload = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
             if (!base64Payload) {
@@ -412,7 +425,8 @@
                         appendImportDebug('Embedded PDF payload produced usable invoice data');
                         return embeddedPayload;
                     }
-                    const parsedFromText = parseInvoiceTextToData(pdfText, file && file.name ? file.name : 'invoice.pdf');
+                    const visiblePdfText = removeEmbeddedInvoicePayloadFromText(pdfText);
+                    const parsedFromText = parseInvoiceTextToData(visiblePdfText, file && file.name ? file.name : 'invoice.pdf');
                     if (hasMeaningfulInvoiceData(parsedFromText)) {
                         appendImportDebug('Local PDF parser produced usable invoice data');
                         return parsedFromText;
@@ -733,7 +747,7 @@
         }
 
         function parseInvoiceTextToData(rawText, sourceName = '') {
-            const normalizedText = String(rawText || '').replace(/\r/g, '\n');
+            const normalizedText = removeEmbeddedInvoicePayloadFromText(rawText).replace(/\r/g, '\n');
             const lines = normalizedText
                 .split('\n')
                 .map(normalizeSpace)
