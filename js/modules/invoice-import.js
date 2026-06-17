@@ -407,6 +407,11 @@
                 const pdfText = await extractTextFromPdf(file);
                 if (normalizeSpace(pdfText)) {
                     appendImportDebug('Local PDF parser extracted text', { textLength: pdfText.length });
+                    const embeddedPayload = extractEmbeddedInvoicePayloadFromText(pdfText);
+                    if (hasMeaningfulInvoiceData(embeddedPayload)) {
+                        appendImportDebug('Embedded PDF payload produced usable invoice data');
+                        return embeddedPayload;
+                    }
                     const parsedFromText = parseInvoiceTextToData(pdfText, file && file.name ? file.name : 'invoice.pdf');
                     if (hasMeaningfulInvoiceData(parsedFromText)) {
                         appendImportDebug('Local PDF parser produced usable invoice data');
@@ -803,6 +808,12 @@
 
             if (extension === 'html' || extension === 'htm' || /<[^>]+>/.test(rawText)) {
                 rawText = htmlToPlainText(rawText);
+            }
+
+            const embeddedPayload = extractEmbeddedInvoicePayloadFromText(rawText);
+            if (hasMeaningfulInvoiceData(embeddedPayload)) {
+                appendImportDebug('Embedded payload produced usable invoice data');
+                return embeddedPayload;
             }
 
             const parsedFromText = parseInvoiceTextToData(rawText, name);

@@ -1538,37 +1538,21 @@
             return lines.join('\n');
         }
 
-        function extractEmbeddedInvoicePayloadFromText(rawText) {
-            const text = String(rawText || '');
-            if (!text.includes(PDF_PAYLOAD_MARKERS.start)) return null;
-            if (!text.includes(PDF_PAYLOAD_MARKERS.end)) return null;
-
-            const startIndex = text.indexOf(PDF_PAYLOAD_MARKERS.start);
-            const endIndex = text.indexOf(PDF_PAYLOAD_MARKERS.end, startIndex);
-            if (endIndex < 0 || endIndex <= startIndex) return null;
-
-            const payloadBlock = text.slice(startIndex, endIndex);
-            const chunkPattern = new RegExp(`^${PDF_PAYLOAD_MARKERS.chunkPrefix}(\\d{3})\\s*:\\s*([A-Za-z0-9_\\-\\s]+)$`);
-            const chunks = [];
-
-            const lines = payloadBlock
-                .split(/\r?\n/)
-                .map(normalizeSpace)
-                .filter(Boolean);
-
-            lines.forEach(line => {
-                const match = line.match(chunkPattern);
-                if (!match) return;
-                const order = Number(match[1]);
-                const chunk = String(match[2] || '').replace(/[^A-Za-z0-9_-]/g, '');
-                if (!chunk) return;
-                chunks.push({ order, chunk });
+        function decodeEmbeddedInvoicePayloadChunks(chunks) {
+            const uniqueChunks = new Map();
+            (Array.isArray(chunks) ? chunks : []).forEach(entry => {
+                const order = Number(entry && entry.order);
+                const chunk = String(entry && entry.chunk ? entry.chunk : '').replace(/[^A-Za-z0-9_-]/g, '');
+                if (!Number.isFinite(order) || order < 1 || !chunk || uniqueChunks.has(order)) return;
+                uniqueChunks.set(order, chunk);
             });
 
-            if (!chunks.length) return null;
+            if (!uniqueChunks.size) return null;
 
-            chunks.sort((a, b) => a.order - b.order);
-            const decoded = decodeBase64Url(chunks.map(entry => entry.chunk).join(''));
+            const decoded = decodeBase64Url(Array.from(uniqueChunks.entries())
+                .sort((a, b) => a[0] - b[0])
+                .map(entry => entry[1])
+                .join(''));
             if (!decoded) return null;
 
             try {
@@ -1580,6 +1564,33 @@
                 console.warn('Could not parse embedded payload from PDF', error);
                 return null;
             }
+        }
+
+        function extractEmbeddedInvoicePayloadFromText(rawText) {
+            const text = String(rawText || '');
+            if (!text.includes(PDF_PAYLOAD_MARKERS.chunkPrefix)) return null;
+
+            const startIndex = text.includes(PDF_PAYLOAD_MARKERS.start)
+                ? text.indexOf(PDF_PAYLOAD_MARKERS.start)
+                : 0;
+            const endIndex = text.includes(PDF_PAYLOAD_MARKERS.end)
+                ? text.indexOf(PDF_PAYLOAD_MARKERS.end, startIndex)
+                : text.length;
+            if (endIndex < 0 || endIndex <= startIndex) return null;
+
+            const payloadBlock = text.slice(startIndex, endIndex);
+            const chunkPattern = new RegExp(`${PDF_PAYLOAD_MARKERS.chunkPrefix}(\\d{3})\\s*:\\s*([A-Za-z0-9_\\-\\s]+?)(?=\\s*(?:,?\\s*${PDF_PAYLOAD_MARKERS.chunkPrefix}\\d{3}\\s*:|${PDF_PAYLOAD_MARKERS.end}|$))`, 'g');
+            const chunks = [];
+            let match;
+
+            while ((match = chunkPattern.exec(payloadBlock)) !== null) {
+                const order = Number(match[1]);
+                const chunk = String(match[2] || '').replace(/[^A-Za-z0-9_-]/g, '');
+                if (!chunk) continue;
+                chunks.push({ order, chunk });
+            }
+
+            return decodeEmbeddedInvoicePayloadChunks(chunks);
         }
 
         function embedPayloadTextInPdf(pdf, payloadText) {
