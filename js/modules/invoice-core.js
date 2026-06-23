@@ -18,6 +18,10 @@
         const PAPER_HEIGHT_MM = 279.4;
         const MOBILE_PREVIEW_HORIZONTAL_PADDING = 16;
         const MOBILE_PREVIEW_VERTICAL_PADDING = 44;
+        const LOGO_STORAGE_MAX_DATA_URL_BYTES = 180 * 1024;
+        const LOGO_STORAGE_MAX_WIDTH = 480;
+        const LOGO_STORAGE_MAX_HEIGHT = 240;
+        const LOGO_STORAGE_QUALITY = 0.82;
         const GEMINI_INVOICE_SCHEMA = Object.freeze({
             type: 'object',
             additionalProperties: false,
@@ -1188,15 +1192,101 @@
         }
 
         // Logo Handling
-        function handleLogoUpload(input) {
-            if (input.files && input.files[0]) {
+        function getLogoDataUrlByteLength(value) {
+            const text = String(value || '');
+            if (typeof TextEncoder === 'function') {
+                return new TextEncoder().encode(text).length;
+            }
+            return text.length;
+        }
+
+        function readLogoFileAsDataUrl(file) {
+            return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    invoiceData.logo = e.target.result;
-                    updateInvoice();
-                    showToast('Logo uploaded successfully');
-                };
-                reader.readAsDataURL(input.files[0]);
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(reader.error || new Error('Could not read logo image.'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function loadLogoImage(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error('Could not process logo image.'));
+                image.src = dataUrl;
+            });
+        }
+
+        function drawLogoToCanvas(image, options = {}) {
+            const sourceWidth = image.naturalWidth || image.width || LOGO_STORAGE_MAX_WIDTH;
+            const sourceHeight = image.naturalHeight || image.height || LOGO_STORAGE_MAX_HEIGHT;
+            const scale = Math.min(1, LOGO_STORAGE_MAX_WIDTH / sourceWidth, LOGO_STORAGE_MAX_HEIGHT / sourceHeight);
+            const width = Math.max(1, Math.round(sourceWidth * scale));
+            const height = Math.max(1, Math.round(sourceHeight * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            if (!context) {
+                throw new Error('Could not process logo image.');
+            }
+            if (options.backgroundColor) {
+                context.fillStyle = options.backgroundColor;
+                context.fillRect(0, 0, width, height);
+            }
+            context.drawImage(image, 0, 0, width, height);
+            return canvas;
+        }
+
+        function getSmallestLogoCandidate(candidates, fallback) {
+            return candidates
+                .filter(Boolean)
+                .reduce((best, candidate) => {
+                    if (!best) return candidate;
+                    return getLogoDataUrlByteLength(candidate) < getLogoDataUrlByteLength(best) ? candidate : best;
+                }, fallback || '');
+        }
+
+        async function compactLogoFileForStorage(file) {
+            const originalDataUrl = await readLogoFileAsDataUrl(file);
+            if (getLogoDataUrlByteLength(originalDataUrl) <= LOGO_STORAGE_MAX_DATA_URL_BYTES) {
+                return { dataUrl: originalDataUrl, optimized: false };
+            }
+
+            const image = await loadLogoImage(originalDataUrl);
+            const transparentCanvas = drawLogoToCanvas(image);
+            const candidates = [
+                transparentCanvas.toDataURL('image/webp', LOGO_STORAGE_QUALITY),
+                transparentCanvas.toDataURL('image/png')
+            ];
+
+            let compacted = getSmallestLogoCandidate(candidates, originalDataUrl);
+            if (getLogoDataUrlByteLength(compacted) > LOGO_STORAGE_MAX_DATA_URL_BYTES) {
+                const jpegCanvas = drawLogoToCanvas(image, { backgroundColor: '#ffffff' });
+                compacted = getSmallestLogoCandidate([
+                    jpegCanvas.toDataURL('image/jpeg', LOGO_STORAGE_QUALITY),
+                    compacted
+                ], compacted);
+            }
+
+            return {
+                dataUrl: compacted,
+                optimized: getLogoDataUrlByteLength(compacted) < getLogoDataUrlByteLength(originalDataUrl)
+            };
+        }
+
+        async function handleLogoUpload(input) {
+            if (!(input.files && input.files[0])) return;
+
+            try {
+                const result = await compactLogoFileForStorage(input.files[0]);
+                invoiceData.logo = result.dataUrl;
+                updateInvoice();
+                showToast(result.optimized ? 'Logo uploaded and optimized' : 'Logo uploaded successfully');
+            } catch (error) {
+                console.error(error);
+                showToast('Could not upload logo image', 'error');
             }
         }
 

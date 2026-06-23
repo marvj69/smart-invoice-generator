@@ -3,6 +3,8 @@ const { query } = require('../server/db');
 const { methodAllowed, readJson, sendError, sendJson } = require('../server/http');
 
 const DATA_BODY_LIMIT = 4 * 1024 * 1024;
+const MAX_SYNCED_TEMPLATES = 250;
+const MAX_SYNCED_LOGO_BYTES = 180 * 1024;
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -12,10 +14,34 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function getUtf8ByteLength(value) {
+  return Buffer.byteLength(String(value || ''), 'utf8');
+}
+
+function normalizeInvoiceForStorage(value) {
+  const invoice = { ...asObject(value) };
+  if (typeof invoice.logo === 'string' && getUtf8ByteLength(invoice.logo) > MAX_SYNCED_LOGO_BYTES) {
+    invoice.logo = null;
+  }
+  return invoice;
+}
+
+function normalizeTemplateForStorage(value) {
+  const template = { ...asObject(value) };
+  template.data = normalizeInvoiceForStorage(template.data);
+  return template;
+}
+
+function normalizeTemplatesForStorage(value) {
+  return asArray(value)
+    .slice(0, MAX_SYNCED_TEMPLATES)
+    .map(normalizeTemplateForStorage);
+}
+
 function normalizeStoredRow(row) {
   return {
-    currentInvoice: asObject(row && row.current_invoice),
-    templates: asArray(row && row.templates),
+    currentInvoice: normalizeInvoiceForStorage(row && row.current_invoice),
+    templates: normalizeTemplatesForStorage(row && row.templates),
     defaultCompany: asObject(row && row.default_company),
     updatedAt: row && row.updated_at ? row.updated_at : null
   };
@@ -41,8 +67,8 @@ module.exports = async function userData(req, res) {
     }
 
     const body = await readJson(req, { limit: DATA_BODY_LIMIT });
-    const currentInvoice = JSON.stringify(asObject(body.currentInvoice));
-    const templates = JSON.stringify(asArray(body.templates).slice(0, 250));
+    const currentInvoice = JSON.stringify(normalizeInvoiceForStorage(body.currentInvoice));
+    const templates = JSON.stringify(normalizeTemplatesForStorage(body.templates));
     const defaultCompany = JSON.stringify(asObject(body.defaultCompany));
 
     const rows = await query`
@@ -53,11 +79,13 @@ module.exports = async function userData(req, res) {
         templates = EXCLUDED.templates,
         default_company = EXCLUDED.default_company,
         updated_at = now()
-      RETURNING current_invoice, templates, default_company, updated_at
+      RETURNING updated_at
     `;
 
     sendJson(res, 200, {
-      data: normalizeStoredRow(rows[0])
+      data: {
+        updatedAt: rows[0] && rows[0].updated_at ? rows[0].updated_at : null
+      }
     });
   } catch (error) {
     sendError(res, error, 'Could not sync invoice data.');

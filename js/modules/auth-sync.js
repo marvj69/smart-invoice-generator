@@ -1,4 +1,8 @@
 const CLOUD_SAVE_DEBOUNCE_MS = 900;
+const CLOUD_SYNC_MAX_TEMPLATES = 250;
+const CLOUD_SYNC_MAX_LOGO_BYTES = 180 * 1024;
+const CLOUD_SYNC_SOFT_BODY_LIMIT_BYTES = 3.5 * 1024 * 1024;
+const CLOUD_SYNC_MAX_BODY_BYTES = 4 * 1024 * 1024;
 let cloudAuthUser = null;
 let cloudSaveTimer = null;
 let cloudSyncPaused = false;
@@ -24,24 +28,52 @@ function apiErrorMessage(error, fallback) {
     return fallback || 'Request failed.';
 }
 
+function getUtf8ByteLength(value) {
+    const text = String(value || '');
+    if (typeof TextEncoder === 'function') {
+        return new TextEncoder().encode(text).length;
+    }
+    return text.length;
+}
+
+function getJsonByteLength(value) {
+    try {
+        return getUtf8ByteLength(JSON.stringify(value));
+    } catch (_error) {
+        return Number.POSITIVE_INFINITY;
+    }
+}
+
+function createCloudPayloadTooLargeError() {
+    const error = new Error('Account sync is too large. Remove or reupload oversized logos, then sync again.');
+    error.status = 413;
+    error.code = 'CLIENT_PAYLOAD_TOO_LARGE';
+    return error;
+}
+
 async function apiRequest(path, options = {}) {
+    const { maxBodyBytes, ...fetchOptions } = options;
     const headers = {
         Accept: 'application/json',
-        ...(options.headers || {})
+        ...(fetchOptions.headers || {})
     };
 
     const request = {
-        ...options,
+        ...fetchOptions,
         credentials: 'include',
         headers
     };
 
-    if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
-        request.body = JSON.stringify(options.body);
+    if (fetchOptions.body && typeof fetchOptions.body === 'object' && !(fetchOptions.body instanceof FormData)) {
+        request.body = JSON.stringify(fetchOptions.body);
         request.headers = {
             ...headers,
             'Content-Type': 'application/json'
         };
+    }
+
+    if (maxBodyBytes && typeof request.body === 'string' && getUtf8ByteLength(request.body) > maxBodyBytes) {
+        throw createCloudPayloadTooLargeError();
     }
 
     const response = await fetch(path, request);
@@ -79,6 +111,7 @@ function normalizeTemplateForCloud(template, index) {
 
 function normalizeTemplatesForCloud(templates) {
     return (Array.isArray(templates) ? templates : [])
+        .slice(0, CLOUD_SYNC_MAX_TEMPLATES)
         .map(normalizeTemplateForCloud)
         .filter(template => template.name);
 }
@@ -137,6 +170,106 @@ function writeTemplatesLocal(templates) {
     }
 }
 
+function isOversizedLogoDataUrl(value) {
+    return typeof value === 'string' && getUtf8ByteLength(value) > CLOUD_SYNC_MAX_LOGO_BYTES;
+}
+
+function stripInvoiceLogo(invoice) {
+    if (!invoice || typeof invoice !== 'object' || !invoice.logo) return invoice;
+    return {
+        ...invoice,
+        logo: null
+    };
+}
+
+function stripTemplateLogo(template) {
+    if (!template || typeof template !== 'object') return template;
+    return {
+        ...template,
+        data: stripInvoiceLogo(template.data || {})
+    };
+}
+
+function pruneOversizedCloudLogos(payload) {
+    let prunedLogoCount = 0;
+    const currentInvoice = normalizeInvoiceData(payload.currentInvoice || {});
+    if (isOversizedLogoDataUrl(currentInvoice.logo)) {
+        currentInvoice.logo = null;
+        prunedLogoCount += 1;
+    }
+
+    const templates = normalizeTemplatesForCloud(payload.templates).map(template => {
+        const data = normalizeInvoiceData(template.data || {});
+        if (isOversizedLogoDataUrl(data.logo)) {
+            data.logo = null;
+            prunedLogoCount += 1;
+        }
+        return {
+            ...template,
+            data
+        };
+    });
+
+    return {
+        payload: {
+            currentInvoice,
+            templates,
+            defaultCompany: normalizeDefaultCompanyProfile(payload.defaultCompany || {})
+        },
+        prunedLogoCount
+    };
+}
+
+function compactCloudPayloadForTransport(payload) {
+    const result = pruneOversizedCloudLogos(payload);
+    let compactedPayload = result.payload;
+    let strippedTemplateLogoCount = 0;
+    let strippedCurrentLogo = false;
+    let skippedTemplateCount = 0;
+
+    if (getJsonByteLength(compactedPayload) > CLOUD_SYNC_SOFT_BODY_LIMIT_BYTES) {
+        compactedPayload = {
+            ...compactedPayload,
+            templates: compactedPayload.templates.map(template => {
+                if (template && template.data && template.data.logo) {
+                    strippedTemplateLogoCount += 1;
+                }
+                return stripTemplateLogo(template);
+            })
+        };
+    }
+
+    if (getJsonByteLength(compactedPayload) > CLOUD_SYNC_SOFT_BODY_LIMIT_BYTES && compactedPayload.currentInvoice.logo) {
+        compactedPayload = {
+            ...compactedPayload,
+            currentInvoice: stripInvoiceLogo(compactedPayload.currentInvoice)
+        };
+        strippedCurrentLogo = true;
+    }
+
+    while (compactedPayload.templates.length && getJsonByteLength(compactedPayload) > CLOUD_SYNC_SOFT_BODY_LIMIT_BYTES) {
+        compactedPayload = {
+            ...compactedPayload,
+            templates: compactedPayload.templates.slice(0, -1)
+        };
+        skippedTemplateCount += 1;
+    }
+
+    if (getJsonByteLength(compactedPayload) > CLOUD_SYNC_MAX_BODY_BYTES) {
+        throw createCloudPayloadTooLargeError();
+    }
+
+    const skippedLogos = result.prunedLogoCount + strippedTemplateLogoCount + (strippedCurrentLogo ? 1 : 0);
+    const warnings = [];
+    if (skippedLogos) warnings.push(`${skippedLogos} oversized logo${skippedLogos === 1 ? '' : 's'} skipped`);
+    if (skippedTemplateCount) warnings.push(`${skippedTemplateCount} saved template${skippedTemplateCount === 1 ? '' : 's'} skipped`);
+
+    return {
+        payload: compactedPayload,
+        warning: warnings.length ? `Saved account data; ${warnings.join(', ')}.` : ''
+    };
+}
+
 function getLocalPersistenceSnapshot() {
     const wasPaused = cloudSyncPaused;
     cloudSyncPaused = true;
@@ -153,6 +286,10 @@ function getLocalPersistenceSnapshot() {
     } finally {
         cloudSyncPaused = wasPaused;
     }
+}
+
+function getCloudPersistenceSnapshot() {
+    return compactCloudPayloadForTransport(getLocalPersistenceSnapshot());
 }
 
 function applyCloudDataToLocal(data) {
@@ -247,18 +384,23 @@ async function saveCloudData(options = {}) {
         cloudSaveTimer = null;
     }
 
-    const payload = getLocalPersistenceSnapshot();
+    const snapshot = getCloudPersistenceSnapshot();
+    const payload = snapshot.payload;
     setCloudSyncStatus('Saving...', 'saving');
 
     try {
         await apiRequest('/api/user-data', {
             method: 'PUT',
-            body: payload
+            body: payload,
+            maxBodyBytes: CLOUD_SYNC_MAX_BODY_BYTES
         });
         cloudLastSavedAt = new Date();
         updateAccountUi();
+        if (snapshot.warning) {
+            setCloudSyncStatus(snapshot.warning, 'success');
+        }
         if (options.announce) {
-            showToast('Account data synced');
+            showToast(snapshot.warning || 'Account data synced');
         }
     } catch (error) {
         setCloudSyncStatus(apiErrorMessage(error, 'Sync failed'), 'error');

@@ -18,20 +18,48 @@ function methodAllowed(req, res, allowedMethods) {
   return false;
 }
 
+function createRequestTooLargeError(limit) {
+  const error = new Error(`Request body is too large. Keep the JSON payload under ${Math.round(limit / 1024 / 1024 * 10) / 10} MB.`);
+  error.statusCode = 413;
+  error.code = 'REQUEST_BODY_TOO_LARGE';
+  return error;
+}
+
+function getUtf8ByteLength(value) {
+  return Buffer.byteLength(String(value || ''), 'utf8');
+}
+
+function rejectIfTooLarge(size, limit) {
+  if (size > limit) {
+    return Promise.reject(createRequestTooLargeError(limit));
+  }
+  return null;
+}
+
 function readJson(req, options = {}) {
   const limit = options.limit || 1024 * 1024;
+  const contentLength = Number(req.headers && req.headers['content-length']);
+  if (Number.isFinite(contentLength) && contentLength > limit) {
+    return Promise.reject(createRequestTooLargeError(limit));
+  }
 
   if (req.body !== undefined) {
     if (!req.body) {
       return Promise.resolve({});
     }
     if (Buffer.isBuffer(req.body)) {
+      const sizeError = rejectIfTooLarge(req.body.length, limit);
+      if (sizeError) return sizeError;
       return parseJson(req.body.toString('utf8'));
     }
     if (typeof req.body === 'string') {
+      const sizeError = rejectIfTooLarge(getUtf8ByteLength(req.body), limit);
+      if (sizeError) return sizeError;
       return parseJson(req.body);
     }
     if (typeof req.body === 'object') {
+      const sizeError = rejectIfTooLarge(getUtf8ByteLength(JSON.stringify(req.body)), limit);
+      if (sizeError) return sizeError;
       return Promise.resolve(req.body);
     }
   }
@@ -43,9 +71,7 @@ function readJson(req, options = {}) {
     req.on('data', (chunk) => {
       size += chunk.length;
       if (size > limit) {
-        const error = new Error('Request body is too large.');
-        error.statusCode = 413;
-        reject(error);
+        reject(createRequestTooLargeError(limit));
         req.destroy();
         return;
       }
